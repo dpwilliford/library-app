@@ -87,6 +87,8 @@ Phase 1 must not add catalog ingestion, AI enrichment, market search, real recom
 
 ## Local Install And Run
 
+Runtime note: the app is tested with Node 20 in CI. Phase 2 uses local SQLite persistence through the app dependency stack, not Node's experimental built-in SQLite module.
+
 Install dependencies:
 
 ```bash

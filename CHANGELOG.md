@@ -18,3 +18,4 @@ All notable changes to this project will be documented in this file.
 - Tightened Phase 1 completion language, Current Phase Status placeholder sections, local run/test instructions, and Phase 1.2 mock-data boundaries.
 - Proposed Phase 2 Collection Graph Foundation planning, checklist, data model, CSV import spec, and collection-area seed values.
 - Implemented Phase 2 SQLite-backed local holdings management for librarian roles, including flexible CSV mapping, import preview, validation, duplicate detection, explicit confirmation, holding edits, audit logs, CSV export, and CSV fixture tests.
+- Replaced the Phase 2 SQLite runtime adapter with a Node 20-compatible SQLite dependency so CI and local persistence use the same supported runtime path.
