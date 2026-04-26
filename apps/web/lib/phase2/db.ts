@@ -1,9 +1,6 @@
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-
-type DatabaseModule = {
-  DatabaseSync: new (path: string) => Database;
-};
+import DatabaseConstructor from "better-sqlite3";
 
 type Statement = {
   all: (...values: unknown[]) => Array<Record<string, unknown>>;
@@ -30,17 +27,17 @@ export const seedCollectionAreas = [
   "Unassigned"
 ];
 
-export function getDb() {
+export function getDb(): Database {
   if (cachedDb) {
     return cachedDb;
   }
 
-  const { DatabaseSync } = require("node:sqlite") as DatabaseModule;
   const dbPath = process.env.LIBRARY_DB_PATH ?? join(process.cwd(), "data", "library.sqlite");
   mkdirSync(dirname(dbPath), { recursive: true });
-  cachedDb = new DatabaseSync(dbPath);
-  setupSchema(cachedDb);
-  return cachedDb;
+  const db = new DatabaseConstructor(dbPath) as unknown as Database;
+  setupSchema(db);
+  cachedDb = db;
+  return db;
 }
 
 export function resetDbForTests() {

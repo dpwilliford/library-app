@@ -129,6 +129,7 @@ Recommended approach:
 
 - Use the existing Next.js app.
 - Use local SQLite persistence.
+- Use a stable Node 20-compatible SQLite package rather than Node's experimental built-in SQLite module.
 - Keep data access behind the private app shell.
 - Keep import parsing server-side or in a controlled local route.
 - Keep source CSV files local; do not upload them to third-party services.
