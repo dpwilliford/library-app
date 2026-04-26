@@ -73,7 +73,7 @@ The system consists of five core domains:
 
 ## Current Status
 
-The project is in Phase 1: private app foundation.
+The project is in Phase 1: private app foundation, with Phase 1.2 mock-only data scaffolding for testing relationships.
 
 Phase 1 must remain limited to:
 - local app setup
@@ -84,6 +84,71 @@ Phase 1 must remain limited to:
 - testing instructions
 
 Phase 1 must not add catalog ingestion, AI enrichment, market search, real recommendations, purchasing, analytics calculations, or evidence-review logic.
+
+## Local Install And Run
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the local web app:
+
+```bash
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:3000
+```
+
+Run checks:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+## Demo Login Credentials
+
+All demo users use this password:
+
+```text
+demo123
+```
+
+Available demo users:
+
+- Student: `student@library.test`
+- Professor: `professor@library.test`
+- Librarian: `librarian@library.test`
+- Collection-Area Librarian: `area@library.test`
+- Head Librarian: `head@library.test`
+- Administrator: `admin@library.test`
+
+## Phase 1 Manual Test Checklist
+
+1. Open `http://localhost:3000`.
+2. Confirm the login screen appears.
+3. Log in as each demo user and confirm the visible role label changes.
+4. Confirm each role sees a distinct dashboard shell.
+5. Click each visible navigation link and confirm the placeholder page loads.
+6. Confirm each placeholder includes Title, Purpose, Future Data, Future Actions, and Current Phase Status.
+7. Confirm unfinished areas are labeled as placeholders and do not appear functional.
+8. Log out and confirm the app returns to `/login`.
+9. Try opening `/dashboard` while logged out and confirm it redirects to `/login`.
+
+## Phase 1 Limitations
+
+- Demo authentication is local-only and not production security.
+- Users are fixed in code; there is no invite flow yet.
+- Phase 1.2 mock records are static examples, not catalog data.
+- There is no catalog import, AI enrichment, external API use, market search, real analytics, purchasing workflow, or recommendation engine.
 
 ## Instructions for Codex
 

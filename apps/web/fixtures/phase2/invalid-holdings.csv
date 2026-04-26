@@ -1,0 +1,6 @@
+record_id,title,creator,format,isbn,call_number,location,collection_area,publisher,publication_year,status
+2001,Valid Row,Creator,Book,9780000000001,PN1,Stacks,Books / Other,Publisher,2020,Available
+,Missing Identifier,Creator,Book,9780000000002,PN2,Stacks,Books / Other,Publisher,2020,Available
+2003,,Creator,Book,9780000000003,PN3,Stacks,Books / Other,Publisher,2020,Available
+2004,Missing Status,Creator,Book,9780000000004,PN4,Stacks,Books / Other,Publisher,2020,
+

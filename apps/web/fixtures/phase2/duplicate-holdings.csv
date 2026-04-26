@@ -1,0 +1,4 @@
+record_id,title,creator,format,isbn,call_number,location,collection_area,publisher,publication_year,status
+3001,First Duplicate,Creator,Book,9780000000005,PN5,Stacks,Books / Other,Publisher,2020,Available
+3001,Second Duplicate,Creator,Book,9780000000006,PN6,Stacks,Books / Other,Publisher,2021,Available
+

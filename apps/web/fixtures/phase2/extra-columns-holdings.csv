@@ -1,0 +1,3 @@
+record_id,title,creator,format,isbn,call_number,location,collection_area,publisher,publication_year,status,unexpected_note
+5001,Extra Column Row,Creator,Book,9780000000008,PN8,Stacks,Books / Other,Publisher,2022,Available,Keep this raw value
+

@@ -1,27 +1,20 @@
 # Changelog
 
-## Initial Setup
+All notable changes to this project will be documented in this file.
 
-- Created project specification files
-- Defined system architecture and domains
-- Defined user roles and permissions
-- Defined Phase 1 foundation requirements
-- Added Phase 1 checklist
-- Added Phase 1 build prompt
+## Unreleased
 
-## Phase 1 (In Progress)
-
-- Preparing login system
-- Preparing role-based dashboard structure
-- Preparing local development workflow
-
-All changes must be documented here moving forward.
-
-## Design System Update
-
-- Integrated Ringling Core Branding Guidelines 2025
-- Added Inter typography rules
-- Added black/white anchored color system
-- Added restrained accent color usage
-- Added institutional tone and language constraints
-- Added accessibility and layout rules
+- Added Phase 1 private web application scaffold.
+- Added mock demo login for all required Phase 1 roles.
+- Added role-specific dashboard content and active role labels.
+- Added protected placeholder navigation pages.
+- Added local testing documentation and demo credentials.
+- Added CI workflow for install, linting, type checking, tests, and build.
+- Refined Phase 1.1 dashboard language, role responsibilities, placeholder explanations, navigation labels, and visual hierarchy.
+- Added Phase 1.1 role-aware navigation visibility with clear authority labels for view-only, librarian-review, and head-librarian-only areas.
+- Refactored placeholder pages into consistent Purpose, Future Data, and Future Actions sections.
+- Aligned Phase 1.1 typography, color, spacing, and authority language with the design system.
+- Added Phase 1.2 mock-only data model scaffolding, sample title data, dashboard summaries, and title relationship pages.
+- Tightened Phase 1 completion language, Current Phase Status placeholder sections, local run/test instructions, and Phase 1.2 mock-data boundaries.
+- Proposed Phase 2 Collection Graph Foundation planning, checklist, data model, CSV import spec, and collection-area seed values.
+- Implemented Phase 2 SQLite-backed local holdings management for librarian roles, including flexible CSV mapping, import preview, validation, duplicate detection, explicit confirmation, holding edits, audit logs, CSV export, and CSV fixture tests.
