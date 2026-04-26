@@ -16,3 +16,5 @@ All notable changes to this project will be documented in this file.
 - Aligned Phase 1.1 typography, color, spacing, and authority language with the design system.
 - Added Phase 1.2 mock-only data model scaffolding, sample title data, dashboard summaries, and title relationship pages.
 - Tightened Phase 1 completion language, Current Phase Status placeholder sections, local run/test instructions, and Phase 1.2 mock-data boundaries.
+- Proposed Phase 2 Collection Graph Foundation planning, checklist, data model, CSV import spec, and collection-area seed values.
+- Implemented Phase 2 SQLite-backed local holdings management for librarian roles, including flexible CSV mapping, import preview, validation, duplicate detection, explicit confirmation, holding edits, audit logs, CSV export, and CSV fixture tests.

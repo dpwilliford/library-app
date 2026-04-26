@@ -1,0 +1,4 @@
+record_id,title,creator,format,isbn,call_number,location,collection_area,publisher,publication_year,status
+1001,Watchmen,Alan Moore; Dave Gibbons,Book,9780930289232,PN6728.W36 M66 1987,Stacks,Comics / Graphic Novels,DC Comics,1987,Available
+1002,Spirited Away,Hayao Miyazaki,DVD,9780788857929,DVD ANIME SPIR,Media Library,Manga / Anime,Studio Ghibli,2001,Available
+
