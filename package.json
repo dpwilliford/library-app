@@ -1,0 +1,20 @@
+{
+  "name": "library-app",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @library-app/web",
+    "build": "npm run build -w @library-app/web",
+    "lint": "npm run lint -w @library-app/web",
+    "typecheck": "npm run typecheck -w @library-app/web",
+    "test": "npm run test --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.12",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
