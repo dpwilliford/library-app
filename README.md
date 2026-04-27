@@ -73,17 +73,13 @@ The system consists of five core domains:
 
 ## Current Status
 
-The project is in Phase 1: private app foundation, with Phase 1.2 mock-only data scaffolding for testing relationships.
+The app currently includes three clearly separated layers:
 
-Phase 1 must remain limited to:
-- local app setup
-- login
-- role-based demo users
-- dashboard shell
-- navigation placeholders
-- testing instructions
+- Phase 1: app foundation, login, demo users, protected dashboard, and role-aware navigation.
+- Phase 1.2: static demo records retained for reference/testing only. These are not catalog data.
+- Phase 2: real local SQLite-backed Collection Graph work, including CSV import, holdings, import batches, export, and audit logs.
 
-Phase 1 must not add catalog ingestion, AI enrichment, market search, real recommendations, purchasing, analytics calculations, or evidence-review logic.
+Phase 2 must not add AI enrichment, market search, real recommendations, purchasing, analytics calculations, or evidence-review logic.
 
 ## Local Install And Run
 
@@ -149,8 +145,9 @@ Available demo users:
 
 - Demo authentication is local-only and not production security.
 - Users are fixed in code; there is no invite flow yet.
-- Phase 1.2 mock records are static examples, not catalog data.
-- There is no catalog import, AI enrichment, external API use, market search, real analytics, purchasing workflow, or recommendation engine.
+- Phase 1.2 demo records are static examples, not catalog data.
+- Phase 2 holdings are SQLite-backed local records imported from CSV batches.
+- There is no AI enrichment, external API use, market search, real analytics, purchasing workflow, or recommendation engine.
 
 ## Instructions for Codex
 

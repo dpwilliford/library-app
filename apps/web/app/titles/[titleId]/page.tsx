@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { Badge } from "@/components/Badge";
 import { getClaimsForTitle, getHoldingForInstantiation, getInstantiationsForTitle, getTitleById, getWorksForTitle } from "@/lib/mockQueries";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
@@ -20,7 +21,7 @@ export default async function TitlePage({ params }: { params: { titleId: string 
     <AppShell user={user}>
       <section className="stack">
         <div>
-          <span className="placeholder-label">Mock data</span>
+          <Badge variant="primary">Static Phase 1.2 demo record</Badge>
           <h1>{title.name}</h1>
           <p className="muted">{title.summary}</p>
         </div>
@@ -28,7 +29,8 @@ export default async function TitlePage({ params }: { params: { titleId: string 
         <section className="panel stack">
           <h2>Title Relationships</h2>
           <p>
-            This mock page shows the Phase 1.2 relationship path: Title to Work to Instantiation to Holding.
+            This static Phase 1.2 demo page shows the relationship path: Title to Work to Instantiation to mock Holding. It
+            is retained for reference and is not a Phase 2 SQLite-backed holding.
           </p>
           <div className="relationship-chain" aria-label="Mock relationship chain">
             <span>Title</span>
@@ -72,12 +74,12 @@ export default async function TitlePage({ params }: { params: { titleId: string 
                         Holding: {holding.localIdentifier}, {holding.location}, {holding.status.replaceAll("_", " ")}
                       </small>
                     ) : (
-                      <small>No local holding in mock data.</small>
+                      <small>No local holding in this static Phase 1.2 demo record.</small>
                     )}
                   </span>
-                  <span className={instantiation.ownershipStatus === "owned" ? "owned-pill" : "not-owned-pill"}>
+                  <Badge variant={instantiation.ownershipStatus === "owned" ? "success" : "subtle"}>
                     {instantiation.ownershipStatus === "owned" ? "Owned" : "Not owned"}
-                  </span>
+                  </Badge>
                 </div>
               );
             })}
@@ -106,4 +108,3 @@ export default async function TitlePage({ params }: { params: { titleId: string 
     </AppShell>
   );
 }
-

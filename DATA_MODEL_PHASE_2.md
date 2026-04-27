@@ -12,6 +12,7 @@ It is limited to records that represent what the library owns or is reviewing as
 - Imported values should remain traceable.
 - Librarian edits should be explicit.
 - Collection areas should use controlled values.
+- People and contributors should be distinguishable as separate entries with roles, not collapsed into a single display string.
 - Nothing in Phase 2 should depend on AI-generated claims.
 - No market, analytics, recommendation, or purchasing models should be added in Phase 2.
 
@@ -105,6 +106,49 @@ Recommended fields:
 - `collectionAreaId`
 - `sourceSystemIdentifier`
 
+Structured contributor implementation note:
+
+- `creatorContributor` remains in `holdings.creator_contributor` for backward compatibility and original imported display context.
+- Structured contributor entries are stored separately in `holding_contributors`.
+- Multiple contributors can be represented separately for one holding.
+- Contributor roles can be stored per contributor when roles are explicitly imported or manually entered.
+- The importer must not invent roles when the source CSV does not provide them.
+
+Implemented Phase 2 fix:
+
+- Add structured contributor records that supplement the flat imported display value.
+- Each contributor entry should include at minimum `holdingId`, `name`, `role`, `sortOrder`, and `source`.
+- Preserve the original imported contributor string in `HoldingOriginalValues.originalCreatorContributor`.
+- Display structured contributors separately on holding detail pages.
+- Export both normalized contributor data and the original imported contributor string where feasible.
+- Avoid collapsing distinct people into one string once structured contributor data exists.
+
+### HoldingContributor
+
+Represents one contributor associated with one local holding.
+
+Fields:
+
+- `id`
+- `holdingId`
+- `name`
+- `role`
+- `sortOrder`
+- `source`
+- `createdAt`
+- `updatedAt`
+
+Examples:
+
+- `Alan Moore` — `writer`
+- `Dave Gibbons` — `illustrator`
+
+Source values:
+
+- `csv_structured`: contributor name and role came from structured CSV fields.
+- `legacy_flat`: contributor name was split from a legacy flat creator/contributor string; role remains blank.
+- `manual`: contributor was entered or edited by a librarian.
+
 ### HoldingOriginalValues
 
 Stores the first imported values for a holding, so librarian edits do not erase source context.
@@ -172,6 +216,7 @@ Fields used by Phase 2:
 - One `Holding` belongs to zero or one `CollectionArea`.
 - One `Holding` has one `HoldingOriginalValues` record.
 - One `Holding` can have many `HoldingEditLog` entries.
+- One `Holding` can have many `HoldingContributor` entries.
 - One `User` can create many `ImportBatches`.
 - One `User` can create many `HoldingEditLog` entries.
 
@@ -223,6 +268,13 @@ If no stable item-level or holding-level ID exists in the spreadsheet, implement
 
 The importer should allow these fields to be mapped from alternate column names.
 
+Contributor handling clarification:
+
+- The current Phase 2 importer maps `creator`, `author`, `contributor`, or `creator/contributor` into the flat `creatorContributor` field.
+- The Phase 2 importer also accepts structured contributor fields, including contributor name and contributor role mappings, numbered pairs such as `contributor_1_name` and `contributor_1_role`, and delimited pairs in `contributors`.
+- If only the flat field exists, the app preserves the original string and may split semicolon-separated names into structured contributor rows with blank roles and `legacy_flat` source.
+- The app does not infer roles from names or titles.
+
 ## Ownership Rule
 
 Every saved `Holding` in Phase 2 represents an owned or locally tracked item.
@@ -258,6 +310,11 @@ The export should include:
 - source system identifier
 - import batch ID
 - updated timestamp
+
+Contributor export clarification:
+
+- Export includes the original imported contributor string and normalized contributor fields.
+- Holdings with multiple contributors export as repeatable contributor rows so `contributor_name`, `contributor_role`, `contributor_sort_order`, and `contributor_source` are not collapsed into one undifferentiated string.
 
 Optional export fields:
 

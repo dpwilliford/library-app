@@ -57,6 +57,8 @@ Recommended mappings:
 
 - Source System Identifier
 - Creator/Contributor
+- Contributor Name
+- Contributor Role
 - Publisher
 - Publication Year
 - Format
@@ -113,6 +115,53 @@ The inspected sample CSV maps as follows:
 | `publication_year` | Publication Year | Optional |
 
 The sample values indicate `record_id` is complete and unique in the sample. It should be proposed as the default identifier mapping for this file.
+
+## Structured Contributor Handling
+
+Current Phase 2 behavior:
+
+- CSV import maps `creator`, `author`, `contributor`, or `creator/contributor` into the backward-compatible flat `creatorContributor` value.
+- The database stores that original value in `holdings.creator_contributor` and `holding_original_values.original_creator_contributor`.
+- Structured contributor rows are stored in `holding_contributors`.
+- The holding detail page displays contributors as a structured list.
+- Contributor editing is separate from the main holding metadata edit form.
+- CSV export includes contributor-specific fields instead of collapsing contributors into one undifferentiated string.
+
+Answers to the contributor audit after the Phase 2 metadata correction:
+
+1. Contributor data is no longer stored only as a flat string; structured rows are stored in `holding_contributors`.
+2. Multiple contributors can be represented separately.
+3. Roles can be stored per contributor when the source provides them or a librarian enters them.
+4. CSV import supports contributor-role pairs through mapped fields, numbered fields, or delimited structured values.
+5. Export preserves contributor structure through contributor-specific columns.
+6. The holding detail page displays contributors as a structured list.
+
+This is a data-model issue. Bibliographic and collection metadata should distinguish people or contributors as separate
+entries with roles, for example:
+
+- `Alan Moore` — `writer`
+- `Dave Gibbons` — `illustrator`
+
+Implemented Phase 2 behavior:
+
+- Supplement the flat `creatorContributor` value with structured contributor rows.
+- Support contributor name and role pairs.
+- Preserve the original imported contributor string in `holding_original_values`.
+- Display structured contributors separately on holding detail pages.
+- Export both normalized contributor data and the original contributor string where feasible.
+- Avoid collapsing distinct people into one string after structured contributor data exists.
+
+Potential CSV patterns to support:
+
+- One combined source field: `creator`
+- Repeated paired fields: `contributor_1_name`, `contributor_1_role`, `contributor_2_name`, `contributor_2_role`
+- Delimited paired fields: `contributors` with values such as `Alan Moore|writer; Dave Gibbons|illustrator`
+
+Importer caution:
+
+- The app should not guess contributor roles from names or title strings.
+- If roles are not explicit in the CSV, imported contributor rows keep a blank role and preserve the original text.
+- Real EdPort exports may vary, so contributor-role mapping should remain configurable rather than hardcoded.
 
 ## Validation Rules
 
@@ -211,6 +260,7 @@ Confirmed initial behavior:
 - Save valid rows.
 - Skip invalid rows.
 - Block duplicate rows until librarian resolves them.
+- In Phase 2.2, show suspected duplicate states in the review UI, but do not merge, update, replace, or delete existing holdings automatically.
 - Store import batch metadata.
 - Store raw row data for traceability.
 - Require explicit confirmation before saving valid rows when invalid rows will be skipped.
@@ -238,6 +288,8 @@ Export should include:
 - Internal System ID
 - Title
 - Creator/Contributor
+- Structured Contributors, when implemented
+- Original Creator/Contributor String, when structured contributors are implemented
 - Format
 - Material Type
 - Location

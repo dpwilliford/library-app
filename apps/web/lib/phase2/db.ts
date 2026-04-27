@@ -1,4 +1,5 @@
 import { mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
 import DatabaseConstructor from "better-sqlite3";
 
@@ -139,14 +140,55 @@ function setupSchema(db: Database) {
       reason TEXT,
       FOREIGN KEY (holding_id) REFERENCES holdings(id)
     );
+
+    CREATE TABLE IF NOT EXISTS holding_contributors (
+      id TEXT PRIMARY KEY,
+      holding_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT '',
+      sort_order INTEGER NOT NULL,
+      source TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (holding_id) REFERENCES holdings(id)
+    );
   `);
 
   seedCollectionAreas.forEach((name, index) => {
     db.prepare(
       `INSERT OR IGNORE INTO collection_areas (id, name, description, is_active, sort_order)
-       VALUES (?, ?, ?, 1, ?)`
+     VALUES (?, ?, ?, 1, ?)`
     ).run(slugify(name), name, `${name} seed value`, index + 1);
   });
+
+  backfillLegacyContributors(db);
+}
+
+function backfillLegacyContributors(db: Database) {
+  const holdings = db
+    .prepare(
+      `SELECT id, creator_contributor
+       FROM holdings h
+       WHERE creator_contributor IS NOT NULL
+         AND creator_contributor != ''
+         AND NOT EXISTS (SELECT 1 FROM holding_contributors hc WHERE hc.holding_id = h.id)`
+    )
+    .all();
+
+  for (const holding of holdings) {
+    const names = String(holding.creator_contributor)
+      .split(";")
+      .map((name) => name.trim())
+      .filter(Boolean);
+    const timestamp = nowIso();
+    names.forEach((name, index) => {
+      db.prepare(
+        `INSERT INTO holding_contributors
+         (id, holding_id, name, role, sort_order, source, created_at, updated_at)
+         VALUES (?, ?, ?, '', ?, 'legacy_flat', ?, ?)`
+      ).run(randomUUID(), String(holding.id), name, index + 1, timestamp, timestamp);
+    });
+  }
 }
 
 export function slugify(value: string) {

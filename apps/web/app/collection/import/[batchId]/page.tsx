@@ -1,6 +1,7 @@
 import { AppShell } from "@/components/AppShell";
+import { Badge } from "@/components/Badge";
 import { confirmImportBatchAction, remapImportPreviewAction } from "../../actions";
-import { getImportBatch } from "@/lib/phase2/collectionData";
+import { describeImportRowOutcome, getImportBatch, getImportBatchSummary } from "@/lib/phase2/collectionData";
 import { canManageHoldings } from "@/lib/phase2/permissions";
 import { requireUser } from "@/lib/session";
 import Link from "next/link";
@@ -11,6 +12,9 @@ const mappingFields = [
   ["title", "Title"],
   ["status", "Status"],
   ["creatorContributor", "Creator / Contributor"],
+  ["contributorName", "Contributor Name"],
+  ["contributorRole", "Contributor Role"],
+  ["contributors", "Contributor Pairs"],
   ["format", "Format"],
   ["isbn", "ISBN"],
   ["callNumber", "Call Number"],
@@ -26,7 +30,7 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
     return (
       <AppShell user={user}>
         <section className="panel stack">
-          <span className="placeholder-label">Placeholder</span>
+          <Badge variant="primary">Placeholder</Badge>
           <h1>Collection Exploration</h1>
           <p>Imported holdings management is limited to librarian roles in Phase 2.</p>
         </section>
@@ -39,18 +43,18 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
     notFound();
   }
 
-  const readyCount = batch.rows.filter((row) => row.validationStatus === "valid").length;
-  const warningCount = batch.rows.filter((row) => row.validationStatus === "warning").length;
-  const invalidCount = batch.rows.filter((row) => row.validationStatus === "invalid").length;
-  const duplicateCount = batch.rows.filter((row) => row.validationStatus === "duplicate").length;
+  const summary = getImportBatchSummary(batch);
 
   return (
     <AppShell user={user}>
       <section className="stack">
         <div>
-          <p className="eyebrow">Import preview</p>
+          <p className="eyebrow">Phase 2 CSV import preview</p>
           <h1>{batch.fileName}</h1>
-          <p className="muted">Nothing has been saved as holdings yet. Review mapping and validation before confirming.</p>
+          <p className="muted">
+            Review this Phase 2 import batch before it writes SQLite-backed holdings. Duplicate rows are held for librarian
+            review and do not overwrite saved holdings.
+          </p>
         </div>
 
         <div className="summary-grid">
@@ -59,22 +63,46 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
             <span>rows</span>
           </div>
           <div>
-            <strong>{readyCount}</strong>
-            <span>ready</span>
+            <strong>{summary.validRows}</strong>
+            <span>valid rows</span>
           </div>
           <div>
-            <strong>{warningCount}</strong>
-            <span>warnings</span>
+            <strong>{summary.warningRows}</strong>
+            <span>warning rows</span>
           </div>
           <div>
-            <strong>{invalidCount}</strong>
-            <span>invalid</span>
+            <strong>{summary.invalidRows}</strong>
+            <span>invalid rows</span>
           </div>
           <div>
-            <strong>{duplicateCount}</strong>
-            <span>duplicates</span>
+            <strong>{summary.duplicateRows}</strong>
+            <span>duplicate rows</span>
+          </div>
+          <div>
+            <strong>{summary.skippedRows}</strong>
+            <span>skipped rows</span>
+          </div>
+          <div>
+            <strong>{summary.importedRows}</strong>
+            <span>imported rows</span>
           </div>
         </div>
+
+        <section className="panel stack">
+          <h2>Phase 2 Import Batch Review Notes</h2>
+          {batch.status === "previewed" ? (
+            <p className="phase-note">Nothing has been saved yet. Confirmation imports valid and warning rows only.</p>
+          ) : (
+            <p className="phase-note">
+              This batch is {batch.status}. {batch.savedCount} row(s) became local holdings and {batch.skippedCount} row(s)
+              were skipped for review or correction.
+            </p>
+          )}
+          <p className="muted">
+            Duplicate behavior: Phase 2.2 only identifies suspected duplicates. It does not merge, update, replace, or delete
+            existing holdings from a CSV import.
+          </p>
+        </section>
 
         {batch.status === "previewed" ? (
           <form action={remapImportPreviewAction} className="panel stack">
@@ -113,19 +141,21 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
                   <th>Status</th>
                   <th>Collection Area</th>
                   <th>Validation</th>
-                  <th>Action</th>
+                  <th>What happened</th>
                 </tr>
               </thead>
               <tbody>
                 {batch.rows.map((row) => (
-                  <tr key={row.id}>
+                  <tr className={row.validationStatus === "duplicate" ? "review-attention" : undefined} key={row.id}>
                     <td>{row.rowNumber}</td>
                     <td>{row.mappedData.externalLocalIdentifier || "Missing"}</td>
                     <td>{row.mappedData.title || "Missing"}</td>
                     <td>{row.mappedData.status || "Missing"}</td>
                     <td>{row.mappedData.collectionArea || "Unassigned"}</td>
                     <td>
-                      <strong>{row.validationStatus}</strong>
+                      <Badge variant={row.validationStatus === "duplicate" || row.validationStatus === "invalid" ? "error" : row.validationStatus === "warning" ? "warning" : "subtle"}>
+                        {row.validationStatus}
+                      </Badge>
                       {row.validationMessages.length > 0 ? (
                         <ul className="plain-list">
                           {row.validationMessages.map((message) => (
@@ -133,8 +163,14 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
                           ))}
                         </ul>
                       ) : null}
+                      {row.matchedHoldingId ? (
+                        <p className="muted">
+                          Possible existing holding:{" "}
+                          <Link href={`/collection/holdings/${row.matchedHoldingId}`}>{row.matchedHoldingId}</Link>
+                        </p>
+                      ) : null}
                     </td>
-                    <td>{row.importAction}</td>
+                    <td>{describeImportRowOutcome(row, batch.status)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -150,6 +186,11 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
               Confirming will import valid and warning rows. Invalid and duplicate rows will be skipped and remain visible in
               this batch history.
             </p>
+            {summary.duplicateRows > 0 ? (
+              <p className="phase-note">
+                This preview contains suspected duplicates. They will be skipped; no existing holdings will be updated.
+              </p>
+            ) : null}
             <button className="button" type="submit">
               Confirm Import
             </button>
@@ -170,4 +211,3 @@ export default async function ImportPreviewPage({ params }: { params: { batchId:
     </AppShell>
   );
 }
-
