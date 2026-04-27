@@ -22,7 +22,7 @@ export default async function EvidenceReviewPage() {
           "Mark unsupported claims as unverified or provisional",
           "Preserve source, confidence, date accessed, and review status"
         ]}
-        phaseNote="Phase 1.2 includes static mock evidence records only. It does not create claims, evaluate evidence, finalize knowledge, or run AI workflows."
+        phaseNote="Phase 1.2 includes static demo evidence records only. Phase 2 is limited to SQLite-backed holdings, import batches, export, and audit logs; this page does not create evidence workflows."
       />
     </AppShell>
   );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Badge } from "@/components/Badge";
 import { clearSession, type SessionUser } from "@/lib/session";
 import { roleLabels, type RoleName } from "@library-app/shared";
 import { redirect } from "next/navigation";
@@ -10,6 +11,7 @@ type NavItem = {
   label: string;
   status?: NavStatus;
   roles: RoleName[];
+  phase2Primary?: boolean;
 };
 
 async function logoutAction() {
@@ -21,14 +23,37 @@ async function logoutAction() {
 const navItems: NavItem[] = [
   {
     href: "/dashboard",
-    label: "Role Dashboard",
+    label: "Dashboard",
+    phase2Primary: true,
     roles: ["student", "professor", "librarian", "collection_area_librarian", "head_librarian", "administrator"]
   },
   {
     href: "/collection",
-    label: "Collection Graph",
+    label: "Holdings",
     status: "View only",
+    phase2Primary: true,
     roles: ["student", "professor", "librarian", "collection_area_librarian", "head_librarian"]
+  },
+  {
+    href: "/collection/import",
+    label: "Import CSV",
+    status: "Requires librarian review",
+    phase2Primary: true,
+    roles: ["librarian", "collection_area_librarian", "head_librarian"]
+  },
+  {
+    href: "/collection/export",
+    label: "Export",
+    status: "Requires librarian review",
+    phase2Primary: true,
+    roles: ["librarian", "collection_area_librarian", "head_librarian"]
+  },
+  {
+    href: "/collection#audit-log",
+    label: "Audit Log",
+    status: "Requires librarian review",
+    phase2Primary: true,
+    roles: ["librarian", "collection_area_librarian", "head_librarian"]
   },
   {
     href: "/recommendations",
@@ -77,26 +102,70 @@ const navItems: NavItem[] = [
 export function AppShell({ user, children }: { user: SessionUser; children: React.ReactNode }) {
   const role = user.role as RoleName;
   const visibleNav = navItems.filter((item) => item.roles.includes(role));
+  const primaryNav = visibleNav.filter((item) => item.phase2Primary);
+  const secondaryNav = visibleNav.filter((item) => !item.phase2Primary);
 
   return (
     <div className="shell">
-      <aside className="sidebar">
+      <header className="site-header">
         <div className="brand">
-          <span>Library Collection Intelligence</span>
-          <small>Phase 1 private app foundation</small>
+          <Link href="/dashboard">Library Collection Intelligence</Link>
+          <small>Phase 2 Collection Graph</small>
         </div>
-        <nav className="nav" aria-label="Primary">
-          {visibleNav.map((item) => (
-            <Link href={item.href} key={item.href}>
+        <nav className="desktop-nav" aria-label="Primary collection navigation">
+          {primaryNav.map((item) => (
+            <Link href={item.href} key={`${item.href}-${item.label}`}>
               <span>{item.label}</span>
-              {item.status ? <small>{item.status}</small> : null}
             </Link>
           ))}
+          {secondaryNav.length > 0 ? (
+            <details className="more-nav">
+              <summary aria-label="Open secondary navigation">More</summary>
+              <div className="more-nav-panel">
+                {secondaryNav.map((item) => (
+                  <Link href={item.href} key={`${item.href}-${item.label}`}>
+                    <span>{item.label}</span>
+                    {item.status ? <small>{item.status}</small> : null}
+                  </Link>
+                ))}
+              </div>
+            </details>
+          ) : null}
           <form action={logoutAction}>
             <button type="submit">Log out</button>
           </form>
         </nav>
-      </aside>
+        <details className="mobile-menu">
+          <summary aria-label="Open or close navigation menu">Menu</summary>
+          <div className="mobile-menu-panel" id="mobile-navigation">
+            <nav aria-label="Mobile primary navigation">
+              {primaryNav.map((item) => (
+                <Link href={item.href} key={`${item.href}-${item.label}-mobile`}>
+                  <span>{item.label}</span>
+                  {item.status ? <small>{item.status}</small> : null}
+                </Link>
+              ))}
+            </nav>
+            {secondaryNav.length > 0 ? (
+              <details className="mobile-secondary">
+                <summary aria-label="Open secondary links">More</summary>
+                <nav aria-label="Mobile secondary navigation">
+                  {secondaryNav.map((item) => (
+                    <Link href={item.href} key={`${item.href}-${item.label}-mobile-secondary`}>
+                      <span>{item.label}</span>
+                      {item.status ? <small>{item.status}</small> : null}
+                    </Link>
+                  ))}
+                </nav>
+              </details>
+            ) : null}
+            <form action={logoutAction}>
+              <button type="submit">Log out</button>
+            </form>
+            <p className="mobile-menu-help">Use Menu again to close navigation.</p>
+          </div>
+        </details>
+      </header>
       <main className="main">
         <div className="header">
           <div>
@@ -105,11 +174,13 @@ export function AppShell({ user, children }: { user: SessionUser; children: Reac
             <div className="muted">{user.email}</div>
           </div>
           <div>
-            <span className="badge">{roleLabels[role]}</span>
+            <Badge variant="primary">{roleLabels[role]}</Badge>
           </div>
         </div>
         <div className="testing-note">
-          Phase 1 uses role-aware navigation. Phase 1.2 mock records are clearly labeled and remain static for testing.
+          Phase 1 provides the app foundation: login, demo users, protected dashboard, and role-aware navigation. Phase 1.2
+          static demo records remain for reference. Phase 2 uses the SQLite-backed Collection Graph for CSV imports,
+          holdings, batches, exports, and audit logs.
         </div>
         {children}
       </main>

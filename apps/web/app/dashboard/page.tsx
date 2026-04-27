@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { Badge } from "@/components/Badge";
 import { getDemoUserByEmail } from "@/lib/demoUsers";
 import { getLibrarianReviewItems, getMockCollectionSummary, getTitlesWithOwnership } from "@/lib/mockQueries";
 import { requireUser } from "@/lib/session";
@@ -33,7 +34,7 @@ export default async function DashboardPage() {
         <div className="grid">
           {(demoUser?.panels ?? []).map((panel) => (
             <article className="panel" key={panel.title}>
-              <span className="placeholder-label">Placeholder</span>
+              <Badge variant="primary">Placeholder</Badge>
               <h2>{panel.title}</h2>
               <dl className="dashboard-definition-list">
                 <div>
@@ -54,10 +55,11 @@ export default async function DashboardPage() {
         </div>
         <section className="panel stack">
           <div>
-            <span className="placeholder-label">Mock data</span>
-            <h2>Phase 1.2 Mock Collection Data</h2>
+            <Badge variant="primary">Static Phase 1.2 demo record</Badge>
+            <h2>Static Phase 1.2 Demo Records</h2>
             <p className="muted">
-              These records are static examples used to test structure and relationships. They are not catalog data.
+              These records are retained to show structure and relationships. They are not Phase 2 SQLite-backed holdings or
+              import batches.
             </p>
           </div>
           {role === "student" ? (
@@ -120,15 +122,16 @@ export default async function DashboardPage() {
           ) : null}
           {role === "professor" || role === "administrator" ? (
             <p className="phase-note">
-              Mock collection data is present for testing, but this role view does not add new actions in Phase 1.2.
+              Static Phase 1.2 demo records are present for reference, but this role view does not add new Phase 2 actions.
             </p>
           ) : null}
         </section>
         <div className="panel">
-          <h2>Phase 1 Boundary</h2>
+          <h2>Phase Boundaries</h2>
           <p>
-            This app currently proves private login, logout, role-specific dashboard content, and protected placeholder
-            navigation. It does not contain real data or working collection intelligence features yet.
+            Phase 1 provides login, demo users, protected dashboards, and role-aware navigation. Static Phase 1.2 demo
+            records remain for reference. Phase 2 collection work happens in SQLite-backed holdings, import batches,
+            exports, and audit logs.
           </p>
         </div>
       </section>

@@ -17,10 +17,15 @@ export type ColumnMapping = {
   materialType?: string;
   acquisitionDate?: string;
   sourceSystemIdentifier?: string;
+  contributorName?: string;
+  contributorRole?: string;
+  contributors?: string;
 };
 
 export type ImportRowPreview = {
   id: string;
+  importBatchId?: string;
+  importBatchFileName?: string;
   rowNumber: number;
   rawData: CsvRow;
   mappedData: MappedHoldingData;
@@ -45,6 +50,25 @@ export type MappedHoldingData = {
   materialType: string;
   acquisitionDate: string;
   sourceSystemIdentifier: string;
+  contributors: HoldingContributorInput[];
+};
+
+export type HoldingContributor = {
+  id: string;
+  holdingId: string;
+  name: string;
+  role: string;
+  sortOrder: number;
+  source: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HoldingContributorInput = {
+  name: string;
+  role: string;
+  sortOrder: number;
+  source: string;
 };
 
 export type ImportBatch = {
@@ -107,21 +131,43 @@ export type HoldingEditLog = {
   reason: string;
 };
 
+export type HoldingReviewFilters = {
+  search?: string;
+  unassigned?: boolean;
+  status?: string;
+  format?: string;
+  location?: string;
+};
+
+export type ImportRowReviewFilters = {
+  validationStatus?: ImportRowPreview["validationStatus"];
+  importAction?: ImportRowPreview["importAction"];
+};
+
+export type ReviewFacetOptions = {
+  statuses: string[];
+  formats: string[];
+  locations: string[];
+};
+
 const fieldAliases: Record<keyof ColumnMapping, string[]> = {
   externalLocalIdentifier: ["record_id", "record id", "item id", "item_id", "barcode", "mms id", "mms_id", "catalog id"],
-  title: ["title", "title proper"],
-  status: ["status", "item status", "item_status"],
+  title: ["title", "title_proper"],
+  status: ["status", "item_status"],
   creatorContributor: ["creator", "author", "contributor", "creator/contributor"],
   format: ["format"],
   isbn: ["isbn"],
-  callNumber: ["call_number", "call number", "classification"],
-  location: ["location", "permanent location"],
+  callNumber: ["call_number", "classification"],
+  location: ["location", "permanent_location"],
   collectionArea: ["collection_area", "collection area"],
   publisher: ["publisher"],
-  publicationYear: ["publication_year", "publication year", "publication date", "date"],
+  publicationYear: ["publication_year", "publication_date", "date"],
   materialType: ["material_type", "material type"],
-  acquisitionDate: ["acquisition_date", "acquisition date"],
-  sourceSystemIdentifier: ["source_system_identifier", "source system identifier", "mms id", "mms_id", "record id"]
+  acquisitionDate: ["acquisition_date"],
+  sourceSystemIdentifier: ["source_system_identifier", "mms_id", "record_id"],
+  contributorName: ["contributor_name", "creator_name", "author_name"],
+  contributorRole: ["contributor_role", "creator_role", "author_role"],
+  contributors: ["contributors", "structured_contributors", "contributor_pairs"]
 };
 
 export function getCollectionAreas() {
@@ -285,6 +331,7 @@ export function confirmImportBatch(batchId: string, userId: string) {
       row.mappedData.status,
       row.mappedData.acquisitionDate
     );
+    replaceHoldingContributors(holdingId, row.mappedData.contributors, userId, "Initial import");
     insertEditLog(holdingId, userId, "created", "", "Imported from CSV preview", "Initial import");
     db.prepare("UPDATE import_rows SET import_action = 'imported', matched_holding_id = ? WHERE id = ?").run(holdingId, row.id);
     savedCount += 1;
@@ -299,16 +346,164 @@ export function confirmImportBatch(batchId: string, userId: string) {
   return getImportBatch(batch.id);
 }
 
-export function listHoldings() {
+export function listHoldings(filters: HoldingReviewFilters = {}) {
+  const clauses: string[] = [];
+  const values: string[] = [];
+
+  if (filters.search?.trim()) {
+    const search = `%${filters.search.trim()}%`;
+    clauses.push(
+      `(h.title LIKE ? OR h.external_local_identifier LIKE ? OR h.creator_contributor LIKE ? OR h.call_number LIKE ?
+        OR EXISTS (SELECT 1 FROM holding_contributors hc WHERE hc.holding_id = h.id AND (hc.name LIKE ? OR hc.role LIKE ?)))`
+    );
+    values.push(search, search, search, search, search, search);
+  }
+  if (filters.unassigned) {
+    clauses.push("(h.collection_area_id IS NULL OR h.collection_area_id = '' OR h.collection_area_id = 'unassigned')");
+  }
+  if (filters.status?.trim()) {
+    clauses.push("h.status = ?");
+    values.push(filters.status.trim());
+  }
+  if (filters.format?.trim()) {
+    clauses.push("h.format = ?");
+    values.push(filters.format.trim());
+  }
+  if (filters.location?.trim()) {
+    clauses.push("h.location = ?");
+    values.push(filters.location.trim());
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+
   return getDb()
     .prepare(
       `SELECT h.*, ca.name AS collection_area_name
        FROM holdings h
        LEFT JOIN collection_areas ca ON ca.id = h.collection_area_id
+       ${where}
        ORDER BY h.title COLLATE NOCASE`
     )
-    .all()
+    .all(...values)
     .map(holdingFromDb);
+}
+
+export function getHoldingReviewFacets(): ReviewFacetOptions {
+  const db = getDb();
+  const valuesFor = (field: string) =>
+    db
+      .prepare(`SELECT DISTINCT ${field} AS value FROM holdings WHERE ${field} IS NOT NULL AND ${field} != '' ORDER BY ${field}`)
+      .all()
+      .map((row) => String(row.value));
+
+  return {
+    statuses: valuesFor("status"),
+    formats: valuesFor("format"),
+    locations: valuesFor("location")
+  };
+}
+
+export function listImportRowsForReview(filters: ImportRowReviewFilters = {}) {
+  const clauses: string[] = [];
+  const values: string[] = [];
+
+  if (filters.validationStatus) {
+    clauses.push("ir.validation_status = ?");
+    values.push(filters.validationStatus);
+  }
+  if (filters.importAction) {
+    clauses.push("ir.import_action = ?");
+    values.push(filters.importAction);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  return getDb()
+    .prepare(
+      `SELECT ir.*, ib.file_name AS import_batch_file_name
+       FROM import_rows ir
+       JOIN import_batches ib ON ib.id = ir.import_batch_id
+       ${where}
+       ORDER BY ib.created_at DESC, ir.row_number ASC
+       LIMIT 50`
+    )
+    .all(...values)
+    .map(rowFromDb);
+}
+
+export function getImportReviewSummary() {
+  const rows = getDb()
+    .prepare(
+      `SELECT validation_status, import_action, COUNT(*) AS count
+       FROM import_rows
+       GROUP BY validation_status, import_action`
+    )
+    .all();
+
+  const summary = {
+    warningRows: 0,
+    invalidRows: 0,
+    duplicateRows: 0,
+    skippedRows: 0,
+    importedRows: 0
+  };
+
+  for (const row of rows) {
+    const count = Number(row.count);
+    if (row.validation_status === "warning") {
+      summary.warningRows += count;
+    }
+    if (row.validation_status === "invalid") {
+      summary.invalidRows += count;
+    }
+    if (row.validation_status === "duplicate") {
+      summary.duplicateRows += count;
+    }
+    if (row.import_action === "skipped") {
+      summary.skippedRows += count;
+    }
+    if (row.import_action === "imported") {
+      summary.importedRows += count;
+    }
+  }
+
+  return summary;
+}
+
+export function getImportBatchSummary(batch: ImportBatch) {
+  return {
+    validRows: batch.rows.filter((row) => row.validationStatus === "valid").length,
+    warningRows: batch.rows.filter((row) => row.validationStatus === "warning").length,
+    invalidRows: batch.rows.filter((row) => row.validationStatus === "invalid").length,
+    duplicateRows: batch.rows.filter((row) => row.validationStatus === "duplicate").length,
+    skippedRows: batch.rows.filter((row) => row.importAction === "skipped").length,
+    importedRows: batch.rows.filter((row) => row.importAction === "imported").length,
+    pendingRows: batch.rows.filter((row) => row.importAction === "pending").length
+  };
+}
+
+export function describeImportRowOutcome(row: ImportRowPreview, batchStatus: string) {
+  if (row.importAction === "imported") {
+    return "Imported as a local holding.";
+  }
+  if (row.importAction === "skipped" && row.validationStatus === "duplicate") {
+    return "Skipped because the local identifier is a suspected duplicate. No existing holding was overwritten.";
+  }
+  if (row.importAction === "skipped") {
+    return "Skipped during confirmation. Review the validation messages before retrying in a later import.";
+  }
+  if (row.validationStatus === "duplicate") {
+    return "Will be skipped until a librarian resolves the duplicate outside this import. Phase 2.2 does not overwrite holdings.";
+  }
+  if (row.validationStatus === "invalid") {
+    return "Will be skipped unless the row is corrected and the preview is rerun.";
+  }
+  if (row.validationStatus === "warning") {
+    return "Can import, but the warning should be reviewed before confirmation.";
+  }
+  if (batchStatus === "previewed") {
+    return "Ready to import after explicit confirmation.";
+  }
+  return "No action recorded for this row.";
 }
 
 export function getHolding(id: string) {
@@ -337,6 +532,28 @@ export function getHoldingEditLogs(holdingId: string) {
       newValue: String(row.new_value ?? ""),
       reason: String(row.reason ?? "")
     })) as HoldingEditLog[];
+}
+
+export function getHoldingContributors(holdingId: string) {
+  return getDb()
+    .prepare("SELECT * FROM holding_contributors WHERE holding_id = ? ORDER BY sort_order, name COLLATE NOCASE")
+    .all(holdingId)
+    .map(contributorFromDb);
+}
+
+export function updateHoldingContributors(holdingId: string, contributors: HoldingContributorInput[], userId: string) {
+  const current = getHoldingContributors(holdingId);
+  const next = normalizeContributorInputs(contributors, "manual");
+  const currentSummary = summarizeContributors(current);
+  const nextSummary = summarizeContributors(next);
+
+  if (currentSummary === nextSummary) {
+    return current;
+  }
+
+  replaceHoldingContributors(holdingId, next, userId, "Manual contributor edit");
+  insertEditLog(holdingId, userId, "contributors", currentSummary, nextSummary, "Manual contributor edit");
+  return getHoldingContributors(holdingId);
 }
 
 export function updateHolding(
@@ -400,13 +617,31 @@ export function updateHolding(
 
 export function exportHoldingsCsv() {
   const holdings = listHoldings();
-  return toCsv(
-    holdings.map((holding) => ({
+  const rows = holdings.flatMap((holding) => {
+    const contributors = getHoldingContributors(holding.id);
+    const original = getHoldingOriginalCreatorContributor(holding.id);
+    const contributorRows =
+      contributors.length > 0
+        ? contributors
+        : [
+            {
+              name: "",
+              role: "",
+              source: "",
+              sortOrder: 1
+            }
+          ];
+
+    return contributorRows.map((contributor) => ({
       internal_system_id: holding.id,
       external_local_identifier: holding.externalLocalIdentifier,
       external_identifier_field: holding.externalIdentifierField,
       title: holding.title,
-      creator: holding.creatorContributor,
+      original_creator_contributor: original || holding.creatorContributor,
+      contributor_name: contributor.name,
+      contributor_role: contributor.role,
+      contributor_sort_order: contributor.sortOrder,
+      contributor_source: contributor.source,
       format: holding.format,
       isbn: holding.isbn,
       call_number: holding.callNumber,
@@ -417,8 +652,9 @@ export function exportHoldingsCsv() {
       status: holding.status,
       import_batch_id: holding.importBatchId,
       updated_at: holding.updatedAt
-    }))
-  );
+    }));
+  });
+  return toCsv(rows);
 }
 
 export function autoMapColumns(headers: string[]): ColumnMapping {
@@ -438,11 +674,12 @@ export function autoMapColumns(headers: string[]): ColumnMapping {
 }
 
 export function mapRow(row: CsvRow, mapping: ColumnMapping): MappedHoldingData {
+  const creatorContributor = valueAt(row, mapping.creatorContributor);
   return {
     externalLocalIdentifier: valueAt(row, mapping.externalLocalIdentifier),
     title: valueAt(row, mapping.title),
     status: valueAt(row, mapping.status),
-    creatorContributor: valueAt(row, mapping.creatorContributor),
+    creatorContributor,
     format: valueAt(row, mapping.format),
     isbn: valueAt(row, mapping.isbn),
     callNumber: valueAt(row, mapping.callNumber),
@@ -452,7 +689,8 @@ export function mapRow(row: CsvRow, mapping: ColumnMapping): MappedHoldingData {
     publicationYear: valueAt(row, mapping.publicationYear),
     materialType: valueAt(row, mapping.materialType),
     acquisitionDate: valueAt(row, mapping.acquisitionDate),
-    sourceSystemIdentifier: valueAt(row, mapping.sourceSystemIdentifier)
+    sourceSystemIdentifier: valueAt(row, mapping.sourceSystemIdentifier),
+    contributors: extractContributors(row, mapping, creatorContributor)
   };
 }
 
@@ -504,6 +742,12 @@ function validateMappedRow(mapped: MappedHoldingData, idCounts: Map<string, numb
     messages.push("Missing status.");
     status = "invalid";
   }
+  if (mapped.status.trim() && !isKnownStatus(mapped.status)) {
+    messages.push("Status is not recognized in the Phase 2 review list.");
+    if (status === "valid") {
+      status = "warning";
+    }
+  }
   if (identifier && (idCounts.get(identifier) ?? 0) > 1) {
     messages.push("Duplicate identifier in this CSV.");
     status = "duplicate";
@@ -528,6 +772,18 @@ function validateMappedRow(mapped: MappedHoldingData, idCounts: Map<string, numb
       status = "warning";
     }
   }
+  if (mapped.format.trim() && !isKnownFormat(mapped.format)) {
+    messages.push("Format is not in the Phase 2 review list. Keep it for review before relying on grouped format reports.");
+    if (status === "valid") {
+      status = "warning";
+    }
+  }
+  if (mapped.location.trim() && hasSuspiciousLocation(mapped.location)) {
+    messages.push("Location needs librarian review.");
+    if (status === "valid") {
+      status = "warning";
+    }
+  }
 
   return { status, messages, matchedHoldingId };
 }
@@ -535,6 +791,8 @@ function validateMappedRow(mapped: MappedHoldingData, idCounts: Map<string, numb
 function rowFromDb(row: Record<string, unknown>): ImportRowPreview {
   return {
     id: String(row.id),
+    importBatchId: row.import_batch_id ? String(row.import_batch_id) : undefined,
+    importBatchFileName: row.import_batch_file_name ? String(row.import_batch_file_name) : undefined,
     rowNumber: Number(row.row_number),
     rawData: jsonParse<CsvRow>(row.raw_data_json, {}),
     mappedData: jsonParse<MappedHoldingData>(row.mapped_data_json, emptyMappedData()),
@@ -571,6 +829,19 @@ function holdingFromDb(row: Record<string, unknown>): Holding {
   };
 }
 
+function contributorFromDb(row: Record<string, unknown>): HoldingContributor {
+  return {
+    id: String(row.id),
+    holdingId: String(row.holding_id),
+    name: String(row.name),
+    role: String(row.role ?? ""),
+    sortOrder: Number(row.sort_order),
+    source: String(row.source),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
+}
+
 function insertEditLog(holdingId: string, userId: string, fieldName: string, oldValue: string, newValue: string, reason: string) {
   getDb()
     .prepare(
@@ -579,6 +850,46 @@ function insertEditLog(holdingId: string, userId: string, fieldName: string, old
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(randomUUID(), holdingId, userId, nowIso(), fieldName, oldValue, newValue, reason);
+}
+
+function replaceHoldingContributors(
+  holdingId: string,
+  contributors: HoldingContributorInput[],
+  userId: string,
+  reason: string
+) {
+  const timestamp = nowIso();
+  const normalized = normalizeContributorInputs(contributors, reason === "Initial import" ? "csv_structured" : "manual");
+  const db = getDb();
+  db.prepare("DELETE FROM holding_contributors WHERE holding_id = ?").run(holdingId);
+
+  normalized.forEach((contributor, index) => {
+    db.prepare(
+      `INSERT INTO holding_contributors
+       (id, holding_id, name, role, sort_order, source, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      randomUUID(),
+      holdingId,
+      contributor.name,
+      contributor.role,
+      contributor.sortOrder || index + 1,
+      contributor.source,
+      timestamp,
+      timestamp
+    );
+  });
+
+  if (reason !== "Initial import") {
+    db.prepare("UPDATE holdings SET updated_at = ?, updated_by_user_id = ? WHERE id = ?").run(timestamp, userId, holdingId);
+  }
+}
+
+function getHoldingOriginalCreatorContributor(holdingId: string) {
+  const row = getDb()
+    .prepare("SELECT original_creator_contributor FROM holding_original_values WHERE holding_id = ?")
+    .get(holdingId);
+  return row ? String(row.original_creator_contributor ?? "") : "";
 }
 
 function getCollectionAreaId(name: string) {
@@ -594,12 +905,127 @@ function valueAt(row: CsvRow, key?: string) {
   return key ? String(row[key] ?? "").trim() : "";
 }
 
+function extractContributors(row: CsvRow, mapping: ColumnMapping, creatorContributor: string): HoldingContributorInput[] {
+  const contributors: HoldingContributorInput[] = [];
+  const mappedName = valueAt(row, mapping.contributorName);
+  const mappedRole = valueAt(row, mapping.contributorRole);
+  if (mappedName) {
+    contributors.push({ name: mappedName, role: mappedRole, sortOrder: 1, source: "csv_structured" });
+  }
+
+  const structuredValue = valueAt(row, mapping.contributors);
+  contributors.push(...parseDelimitedContributors(structuredValue, contributors.length + 1));
+  contributors.push(...extractNumberedContributors(row, contributors.length + 1));
+
+  if (contributors.length === 0 && creatorContributor) {
+    return splitLegacyContributorString(creatorContributor);
+  }
+
+  return normalizeContributorInputs(contributors, "csv_structured");
+}
+
+function parseDelimitedContributors(value: string, startOrder: number): HoldingContributorInput[] {
+  if (!value.trim()) {
+    return [];
+  }
+
+  return value
+    .split(";")
+    .map((entry, index) => {
+      const [name = "", role = ""] = entry.split("|").map((part) => part.trim());
+      return { name, role, sortOrder: startOrder + index, source: "csv_structured" };
+    })
+    .filter((contributor) => contributor.name);
+}
+
+function extractNumberedContributors(row: CsvRow, startOrder: number): HoldingContributorInput[] {
+  const byNumber = new Map<string, { name?: string; role?: string }>();
+  for (const [header, value] of Object.entries(row)) {
+    const normalized = normalizeHeader(header);
+    const match = normalized.match(/^contributor_(\d+)_(name|role)$/) ?? normalized.match(/^creator_(\d+)_(name|role)$/);
+    if (!match) {
+      continue;
+    }
+    const [, number, field] = match;
+    const existing = byNumber.get(number) ?? {};
+    existing[field as "name" | "role"] = value.trim();
+    byNumber.set(number, existing);
+  }
+
+  return [...byNumber.entries()]
+    .sort(([left], [right]) => Number(left) - Number(right))
+    .map(([, contributor], index) => ({
+      name: contributor.name ?? "",
+      role: contributor.role ?? "",
+      sortOrder: startOrder + index,
+      source: "csv_structured"
+    }))
+    .filter((contributor) => contributor.name);
+}
+
+function splitLegacyContributorString(value: string): HoldingContributorInput[] {
+  return value
+    .split(";")
+    .map((name, index) => ({
+      name: name.trim(),
+      role: "",
+      sortOrder: index + 1,
+      source: "legacy_flat"
+    }))
+    .filter((contributor) => contributor.name);
+}
+
+function normalizeContributorInputs(contributors: HoldingContributorInput[], fallbackSource: string) {
+  return contributors
+    .map((contributor, index) => ({
+      name: contributor.name.trim(),
+      role: contributor.role.trim(),
+      sortOrder: contributor.sortOrder || index + 1,
+      source: contributor.source.trim() || fallbackSource
+    }))
+    .filter((contributor) => contributor.name);
+}
+
+function summarizeContributors(contributors: Array<Pick<HoldingContributorInput, "name" | "role" | "sortOrder">>) {
+  return contributors
+    .map((contributor) => `${contributor.sortOrder}. ${contributor.name}${contributor.role ? ` — ${contributor.role}` : ""}`)
+    .join("; ");
+}
+
 function normalizeHeader(value: string) {
   return value.trim().toLowerCase().replace(/[-\s]+/g, "_").replaceAll("__", "_");
 }
 
 function normalizeIdentifier(value: string) {
   return value.trim();
+}
+
+function isKnownStatus(value: string) {
+  const allowed = ["available", "checked_out", "checked out", "in_process", "in process", "missing", "withdrawn", "unknown"];
+  return allowed.includes(value.trim().toLowerCase());
+}
+
+function isKnownFormat(value: string) {
+  const allowed = [
+    "book",
+    "books",
+    "dvd",
+    "film",
+    "video",
+    "manga",
+    "comic",
+    "graphic novel",
+    "game",
+    "video game",
+    "periodical",
+    "zine"
+  ];
+  return allowed.includes(value.trim().toLowerCase());
+}
+
+function hasSuspiciousLocation(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.includes("??") || normalized.includes("unknown") || normalized.includes("tbd") || normalized.includes("bad location");
 }
 
 function emptyMappedData(): MappedHoldingData {
@@ -617,6 +1043,7 @@ function emptyMappedData(): MappedHoldingData {
     publicationYear: "",
     materialType: "",
     acquisitionDate: "",
-    sourceSystemIdentifier: ""
+    sourceSystemIdentifier: "",
+    contributors: []
   };
 }

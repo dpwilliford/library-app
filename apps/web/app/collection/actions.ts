@@ -6,6 +6,7 @@ import {
   createImportPreview,
   remapImportPreview,
   updateHolding,
+  updateHoldingContributors,
   type ColumnMapping
 } from "@/lib/phase2/collectionData";
 import { canManageHoldings } from "@/lib/phase2/permissions";
@@ -46,7 +47,10 @@ export async function remapImportPreviewAction(formData: FormData) {
     location: String(formData.get("location") ?? ""),
     collectionArea: String(formData.get("collectionArea") ?? ""),
     publisher: String(formData.get("publisher") ?? ""),
-    publicationYear: String(formData.get("publicationYear") ?? "")
+    publicationYear: String(formData.get("publicationYear") ?? ""),
+    contributorName: String(formData.get("contributorName") ?? ""),
+    contributorRole: String(formData.get("contributorRole") ?? ""),
+    contributors: String(formData.get("contributors") ?? "")
   };
 
   remapImportPreview(batchId, mapping);
@@ -82,3 +86,21 @@ export async function updateHoldingAction(formData: FormData) {
   redirect(`/collection/holdings/${id}`);
 }
 
+export async function updateHoldingContributorsAction(formData: FormData) {
+  const user = await requireHoldingsManager();
+  const id = String(formData.get("id") ?? "");
+  const names = formData.getAll("contributorName").map((value) => String(value));
+  const roles = formData.getAll("contributorRole").map((value) => String(value));
+
+  updateHoldingContributors(
+    id,
+    names.map((name, index) => ({
+      name,
+      role: roles[index] ?? "",
+      sortOrder: index + 1,
+      source: "manual"
+    })),
+    user.email
+  );
+  redirect(`/collection/holdings/${id}`);
+}

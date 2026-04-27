@@ -22,7 +22,7 @@ export default async function TitleGenealogiesPage() {
           "Identify why a specific instantiation matters to teaching or research",
           "Compare owned and not-owned instantiations"
         ]}
-        phaseNote="Phase 1.2 includes static mock title relationships only. It does not create real genealogies or connect to catalog holdings."
+        phaseNote="Phase 1.2 includes static demo title relationships only. These are retained for reference and do not create Phase 2 SQLite-backed holdings or real title genealogies."
       />
     </AppShell>
   );

@@ -1,0 +1,4 @@
+record_id,title,creator,format,isbn,call_number,location,collection_area,publisher,publication_year,status
+9001,Valid Malformed Fixture Row,Creator,Book,9780000000901,PN9001,Stacks,Books / Other,Publisher,2020,Available
+9002
+9003,Missing Status From Short Row

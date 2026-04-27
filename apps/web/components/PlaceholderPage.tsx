@@ -1,3 +1,5 @@
+import { Badge } from "@/components/Badge";
+
 export function PlaceholderPage({
   title,
   purpose,
@@ -13,7 +15,7 @@ export function PlaceholderPage({
 }) {
   return (
     <section className="panel stack">
-      <span className="placeholder-label">Placeholder</span>
+      <Badge variant="primary">Placeholder</Badge>
       <h1>{title}</h1>
       <section className="placeholder-section">
         <h2>Purpose</h2>

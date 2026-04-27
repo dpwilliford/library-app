@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/AppShell";
+import { Badge } from "@/components/Badge";
 import { createImportPreviewAction } from "../actions";
 import { canManageHoldings } from "@/lib/phase2/permissions";
 import { requireUser } from "@/lib/session";
@@ -11,7 +12,7 @@ export default async function ImportHoldingsPage({ searchParams }: { searchParam
     return (
       <AppShell user={user}>
         <section className="panel stack">
-          <span className="placeholder-label">Placeholder</span>
+          <Badge variant="primary">Placeholder</Badge>
           <h1>Collection Exploration</h1>
           <p>Imported holdings management is limited to librarian roles in Phase 2.</p>
         </section>
@@ -24,9 +25,10 @@ export default async function ImportHoldingsPage({ searchParams }: { searchParam
       <section className="stack">
         <div>
           <p className="eyebrow">Phase 2 Collection Graph</p>
-          <h1>Import Holdings CSV</h1>
+          <h1>Phase 2 CSV Import</h1>
           <p className="muted">
-            Upload a local CSV for preview. Nothing is saved as holdings until a librarian confirms the import.
+            Upload a local CSV for SQLite-backed holding preview. Nothing is saved as Phase 2 holdings until a librarian
+            confirms the import.
           </p>
         </div>
         {searchParams.error ? <p className="error">Choose a CSV file before previewing.</p> : null}
