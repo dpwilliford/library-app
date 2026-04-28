@@ -47,6 +47,21 @@ Deliver:
 - approval/rejection workflow
 - audit log
 
+Boundary:
+- Phase 3 is the reviewed knowledge layer.
+- Phase 3 does not include AI enrichment, market search, recommendations, analytics calculations, purchasing workflows, external APIs, title genealogy automation, or student/professor access to real imported holdings.
+- Phase 3 must preserve Phase 2 Collection Graph stability. Claims may link to holdings, but claim workflows must not overwrite imported holding metadata.
+
+Sub-phases:
+- Phase 3.1 — Manual Claims And Evidence Foundation
+- Phase 3.2 — Evidence Review Queue Hardening
+- Phase 3.3 — AI Draft Intake Without Authority
+- Phase 3.4 — External Source And Citation Management
+- Phase 3.5 — Phase 3 Closeout Audit
+
+Planning document:
+- `PHASE_3_PLAN.md`
+
 ## Phase 4 — AI-Assisted Catalog Enhancement
 Timeline: 2–3 months
 
