@@ -118,16 +118,17 @@ This phase depends only on Phase 3.1 data and should not add AI or market featur
 
 ### Phase 3.3 — AI Draft Intake Without Authority
 
-Add a controlled intake lane for AI-drafted claim suggestions.
+Add a controlled intake lane for deterministic mock AI-assisted preview candidates.
 
 Expected scope:
 
-- store AI drafts separately from approved claims
-- record prompt/version/model/input context
-- require evidence attachment before review
-- mark AI outputs as provisional
-- require librarian conversion into a reviewed claim
-- audit all AI-assisted transformations
+- generate non-persistent preview candidates from pasted raw text
+- keep candidates as non-record objects with no IDs
+- do not store candidates in the database
+- do not allow candidates to participate in queries, review queues, counts, or export
+- require librarian/admin review, edit, selection, and explicit save before any records are created
+- convert selected candidates into normal Phase 3 draft records only at librarian/admin save
+- use existing Phase 3 creation functions when selected candidates are saved
 
 This phase must preserve the rule: AI assists, AI does not decide.
 
