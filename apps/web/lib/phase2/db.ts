@@ -152,6 +152,145 @@ function setupSchema(db: Database) {
       updated_at TEXT NOT NULL,
       FOREIGN KEY (holding_id) REFERENCES holdings(id)
     );
+
+    CREATE TABLE IF NOT EXISTS claims (
+      id TEXT PRIMARY KEY,
+      claim_text TEXT NOT NULL CHECK (length(trim(claim_text)) > 0),
+      claim_type TEXT NOT NULL CHECK (claim_type IN (
+        'description',
+        'historical_context',
+        'creator_context',
+        'format_context',
+        'teaching_relevance',
+        'collection_relevance',
+        'other'
+      )),
+      related_holding_id TEXT REFERENCES holdings(id) ON DELETE SET NULL,
+      collection_area_id TEXT REFERENCES collection_areas(id) ON DELETE SET NULL,
+      confidence_level TEXT NOT NULL CHECK (confidence_level IN ('low', 'medium', 'high')),
+      review_status TEXT NOT NULL CHECK (review_status IN (
+        'draft',
+        'ready_for_review',
+        'approved',
+        'rejected',
+        'needs_revision'
+      )),
+      created_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      reviewed_by_user_id TEXT,
+      reviewed_at TEXT,
+      review_note TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS sources (
+      id TEXT PRIMARY KEY,
+      source_title TEXT,
+      source_creator TEXT,
+      source_type TEXT NOT NULL CHECK (source_type IN (
+        'catalog',
+        'book',
+        'article',
+        'publisher_page',
+        'institutional_note',
+        'course_material',
+        'web_page',
+        'other'
+      )),
+      source_url TEXT,
+      citation TEXT,
+      publisher TEXT,
+      publication_date TEXT,
+      created_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK (
+        length(trim(coalesce(source_title, ''))) > 0
+        OR length(trim(coalesce(source_url, ''))) > 0
+        OR length(trim(coalesce(citation, ''))) > 0
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS evidence_records (
+      id TEXT PRIMARY KEY,
+      source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE RESTRICT,
+      excerpt TEXT,
+      supporting_data TEXT,
+      date_accessed TEXT,
+      created_by_user_id TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      CHECK (
+        length(trim(coalesce(excerpt, ''))) > 0
+        OR length(trim(coalesce(supporting_data, ''))) > 0
+      )
+    );
+
+    CREATE TABLE IF NOT EXISTS claim_evidence (
+      id TEXT PRIMARY KEY,
+      claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
+      evidence_id TEXT NOT NULL REFERENCES evidence_records(id) ON DELETE RESTRICT,
+      relationship TEXT NOT NULL CHECK (relationship IN (
+        'supports',
+        'contextualizes',
+        'contradicts',
+        'requires_followup'
+      )),
+      sort_order INTEGER NOT NULL DEFAULT 1,
+      UNIQUE(claim_id, evidence_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS claim_events (
+      id TEXT PRIMARY KEY,
+      claim_id TEXT REFERENCES claims(id) ON DELETE CASCADE,
+      entity_type TEXT NOT NULL CHECK (entity_type IN (
+        'claim',
+        'source',
+        'evidence',
+        'claim_evidence'
+      )),
+      entity_id TEXT NOT NULL,
+      acted_by_user_id TEXT NOT NULL,
+      acted_at TEXT NOT NULL,
+      action TEXT NOT NULL CHECK (action IN (
+        'created',
+        'updated',
+        'source_created',
+        'source_updated',
+        'evidence_attached',
+        'evidence_updated',
+        'evidence_removed',
+        'submitted_for_review',
+        'approved',
+        'rejected',
+        'revision_requested',
+        'returned_to_revision_after_edit'
+      )),
+      old_status TEXT,
+      new_status TEXT,
+      old_value TEXT,
+      new_value TEXT,
+      note TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status ON claims(review_status);
+    CREATE INDEX IF NOT EXISTS idx_claims_confidence_level ON claims(confidence_level);
+    CREATE INDEX IF NOT EXISTS idx_claims_claim_type ON claims(claim_type);
+    CREATE INDEX IF NOT EXISTS idx_claims_related_holding_id ON claims(related_holding_id);
+    CREATE INDEX IF NOT EXISTS idx_claims_collection_area_id ON claims(collection_area_id);
+    CREATE INDEX IF NOT EXISTS idx_claims_created_at ON claims(created_at);
+    CREATE INDEX IF NOT EXISTS idx_sources_source_type ON sources(source_type);
+    CREATE INDEX IF NOT EXISTS idx_sources_source_url ON sources(source_url);
+    CREATE INDEX IF NOT EXISTS idx_sources_citation ON sources(citation);
+    CREATE INDEX IF NOT EXISTS idx_evidence_records_source_id ON evidence_records(source_id);
+    CREATE INDEX IF NOT EXISTS idx_evidence_records_date_accessed ON evidence_records(date_accessed);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_claim_id ON claim_evidence(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_evidence_id ON claim_evidence(evidence_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_evidence_relationship ON claim_evidence(relationship);
+    CREATE INDEX IF NOT EXISTS idx_claim_events_claim_id ON claim_events(claim_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_events_entity ON claim_events(entity_type, entity_id);
+    CREATE INDEX IF NOT EXISTS idx_claim_events_action ON claim_events(action);
+    CREATE INDEX IF NOT EXISTS idx_claim_events_acted_at ON claim_events(acted_at);
   `);
 
   seedCollectionAreas.forEach((name, index) => {
