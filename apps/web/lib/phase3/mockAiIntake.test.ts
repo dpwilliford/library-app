@@ -1,10 +1,11 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { generateAICandidates, previewAICandidates, validateSelectedAICandidatesForSave } from "./mockAiIntake";
+import { generateAICandidates, previewAICandidates, saveSelectedAICandidatesAsDraftRecords, validateSelectedAICandidatesForSave } from "./mockAiIntake";
 
 const userId = "librarian@library.test";
+const fixtureRoot = join(process.cwd(), "fixtures", "phase2");
 
 async function loadModules(dbPath: string) {
   process.env.LIBRARY_DB_PATH = dbPath;
@@ -12,8 +13,16 @@ async function loadModules(dbPath: string) {
   db.resetDbForTests();
   return {
     db,
+    phase2: await import("../phase2/collectionData"),
     phase3: await import("./claimsData")
   };
+}
+
+async function seedHolding(phase2: Awaited<ReturnType<typeof loadModules>>["phase2"]) {
+  const csv = readFileSync(join(fixtureRoot, "valid-holdings.csv"), "utf8");
+  const batchId = phase2.createImportPreview("valid-holdings.csv", csv, userId);
+  phase2.confirmImportBatch(batchId, userId);
+  return phase2.listHoldings({ search: "Watchmen" })[0];
 }
 
 describe("Phase 3.3 mock AI intake candidate boundaries", () => {
@@ -85,11 +94,123 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     const { db } = await loadModules(dbPath);
     const beforeCounts = tableCounts(db.getDb());
     const candidates = generateAICandidates("Short note without a source.");
-    const validation = validateSelectedAICandidatesForSave(candidates);
+    const validation = validateSelectedAICandidatesForSave(candidates, { email: userId, role: "librarian" });
 
     expect(validation).toHaveLength(1);
     expect(validation[0]?.candidate).toEqual(candidates[0]);
     expect(tableCounts(db.getDb())).toEqual(beforeCounts);
+  });
+
+  it.each([
+    ["librarian", "librarian@library.test"],
+    ["administrator", "admin@library.test"]
+  ])("saves selected candidates as Phase 3 draft records for %s users", async (role, email) => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const candidates = generateAICandidates(
+      'Course note: "Watchmen is frequently assigned in comics history courses." https://example.test/watchmen'
+    );
+    const beforeCounts = tableCounts(db.getDb());
+    const beforeExport = phase3.exportClaimsCsv();
+
+    const saved = saveSelectedAICandidatesAsDraftRecords(candidates, { email, role });
+
+    expect(saved).toHaveLength(1);
+    expect(saved[0]).toMatchObject({
+      claimText: "Course note: \"Watchmen is frequently assigned in comics history courses.",
+      claimType: "teaching_relevance",
+      confidenceLevel: "high",
+      reviewStatus: "draft",
+      evidenceCount: 1,
+      reviewedAt: "",
+      reviewedByUserId: "",
+      reviewNote: ""
+    });
+    expect(tableCounts(db.getDb())).toMatchObject({
+      claims: beforeCounts.claims + 1,
+      sources: beforeCounts.sources + 1,
+      evidence_records: beforeCounts.evidence_records + 1,
+      claim_evidence: beforeCounts.claim_evidence + 1,
+      claim_events: beforeCounts.claim_events + 3
+    });
+    expect(phase3.listClaims({ reviewStatus: "draft" }).map((claim) => claim.id)).toContain(saved[0]!.id);
+    expect(phase3.exportClaimsCsv()).not.toBe(beforeExport);
+    expect(phase3.exportClaimsCsv()).toContain(saved[0]!.id);
+    expect(phase3.getEvidenceForClaim(saved[0]!.id)[0]).toMatchObject({
+      relationship: "supports",
+      excerpt: "Watchmen is frequently assigned in comics history courses.",
+      source: {
+        sourceTitle: "Course note: \"Watchmen is frequently assigned in comics history courses.\"",
+        sourceType: "web_page",
+        sourceUrl: "https://example.test/watchmen"
+      }
+    });
+    expect(phase3.getClaimEvents(saved[0]!.id).map((event) => event.action)).toEqual(["created", "evidence_attached"]);
+    expect(
+      db
+        .getDb()
+        .prepare("SELECT action FROM claim_events WHERE entity_type = 'source'")
+        .all()
+        .map((row) => row.action)
+    ).toEqual(["source_created"]);
+  });
+
+  it("rejects student and professor save attempts before any database write", async () => {
+    const { db } = await loadModules(dbPath);
+    const candidates = generateAICandidates('Preview: "Evidence text." https://example.test/source');
+    const beforeCounts = tableCounts(db.getDb());
+
+    for (const role of ["student", "professor"]) {
+      expect(() => saveSelectedAICandidatesAsDraftRecords(candidates, { email: `${role}@library.test`, role })).toThrow(
+        "Only librarian and administrator roles can save AI intake candidates."
+      );
+    }
+
+    expect(tableCounts(db.getDb())).toEqual(beforeCounts);
+  });
+
+  it("rejects malformed candidates and candidates that assume record IDs", async () => {
+    const { db } = await loadModules(dbPath);
+    const beforeCounts = tableCounts(db.getDb());
+    const malformed = [
+      {
+        id: "not-a-record-id",
+        candidateClaimText: "",
+        candidateClaimKind: "candidate_description",
+        candidateConfidenceHint: "candidate_medium",
+        candidateSourceLabel: "",
+        candidateSourceLocator: "",
+        candidateEvidenceText: "",
+        candidateEvidenceLink: "candidate_supports",
+        candidateUncertaintyNote: "Malformed."
+      }
+    ];
+
+    const validation = validateSelectedAICandidatesForSave(malformed as never, { email: userId, role: "librarian" });
+
+    expect(validation[0]?.isValidForSave).toBe(false);
+    expect(validation[0]?.validationMessages).toContain("Candidate must not include record field id.");
+    expect(validation[0]?.validationMessages).toContain("Candidate requires claim text before save.");
+    expect(validation[0]?.validationMessages).toContain("Candidate requires evidence text before save.");
+    expect(() => saveSelectedAICandidatesAsDraftRecords(malformed as never, { email: userId, role: "librarian" })).toThrow(
+      "Candidate must not include record field id."
+    );
+    expect(tableCounts(db.getDb())).toEqual(beforeCounts);
+  });
+
+  it("does not mutate holdings or contributors when selected candidates are saved", async () => {
+    const { db, phase2 } = await loadModules(dbPath);
+    const holding = await seedHolding(phase2);
+    const beforeHolding = phase2.getHolding(holding.id);
+    const beforeContributors = phase2.getHoldingContributors(holding.id);
+    const beforeCounts = tableCounts(db.getDb());
+    const candidates = generateAICandidates('Collection note: "This save must not edit holdings." https://example.test/holding');
+
+    saveSelectedAICandidatesAsDraftRecords(candidates, { email: userId, role: "librarian" });
+
+    expect(phase2.getHolding(holding.id)).toEqual(beforeHolding);
+    expect(phase2.getHoldingContributors(holding.id)).toEqual(beforeContributors);
+    expect(tableCounts(db.getDb()).holdings).toBe(beforeCounts.holdings);
+    expect(tableCounts(db.getDb()).holding_contributors).toBe(beforeCounts.holding_contributors);
   });
 
   it("returns no candidates for blank input without touching the database", async () => {

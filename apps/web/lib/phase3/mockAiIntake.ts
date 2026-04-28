@@ -1,3 +1,8 @@
+import { createClaim, createSourceEvidenceForClaim, getClaim } from "./claimsData";
+import { canManageEvidence } from "./permissions";
+import type { SessionUser } from "../session";
+import type { CreateSourceInput } from "./models";
+
 export type AICandidateClaimKind =
   | "candidate_description"
   | "candidate_historical_context"
@@ -22,6 +27,16 @@ export type AICandidatePreview = {
   candidateUncertaintyNote: string;
 };
 
+export type AICandidateSaveUser = Pick<SessionUser, "email" | "role">;
+
+export type AICandidateSaveValidation = {
+  candidate: AICandidatePreview;
+  isValidForSave: boolean;
+  validationMessages: string[];
+};
+
+const forbiddenRecordKeys = ["id", "claimId", "sourceId", "evidenceId", "reviewStatus", "review_status", "claimEventId"];
+
 export type GenerateAICandidatesOptions = {
   maxCandidates?: number;
 };
@@ -45,15 +60,73 @@ export function generateAICandidates(rawText: string, options: GenerateAICandida
 
 export const previewAICandidates = generateAICandidates;
 
-export function validateSelectedAICandidatesForSave(candidates: AICandidatePreview[]) {
-  return candidates.map((candidate) => ({
-    candidate,
-    isValidForSave: Boolean(candidate.candidateClaimText.trim() && candidate.candidateEvidenceText.trim()),
-    validationMessages: [
-      ...(candidate.candidateClaimText.trim() ? [] : ["Candidate requires claim text before save."]),
-      ...(candidate.candidateEvidenceText.trim() ? [] : ["Candidate requires evidence text before save."])
-    ]
-  }));
+export function validateSelectedAICandidatesForSave(candidates: AICandidatePreview[], user: AICandidateSaveUser) {
+  if (!Array.isArray(candidates)) {
+    throw new Error("Selected candidates must be an array.");
+  }
+  const permissionMessages = canManageEvidence(user.role) ? [] : ["Only librarian and administrator roles can save AI intake candidates."];
+
+  return candidates.map((candidate) => {
+    const validationMessages = [
+      ...permissionMessages,
+      ...candidateRecordKeyMessages(candidate),
+      ...candidateShapeMessages(candidate),
+      ...(trimmedValue(candidate, "candidateClaimText") ? [] : ["Candidate requires claim text before save."]),
+      ...(trimmedValue(candidate, "candidateEvidenceText") ? [] : ["Candidate requires evidence text before save."]),
+      ...(trimmedValue(candidate, "candidateSourceLabel") || trimmedValue(candidate, "candidateSourceLocator")
+        ? []
+        : ["Candidate requires source label or source locator before save."])
+    ];
+
+    return {
+      candidate,
+      isValidForSave: validationMessages.length === 0,
+      validationMessages
+    };
+  });
+}
+
+export function saveSelectedAICandidatesAsDraftRecords(candidates: AICandidatePreview[], user: AICandidateSaveUser) {
+  if (!canManageEvidence(user.role)) {
+    throw new Error("Only librarian and administrator roles can save AI intake candidates.");
+  }
+  if (!Array.isArray(candidates) || candidates.length === 0) {
+    throw new Error("Select at least one AI intake candidate to save.");
+  }
+  const validation = validateSelectedAICandidatesForSave(candidates, user);
+  const invalid = validation.find((result) => !result.isValidForSave);
+  if (invalid) {
+    throw new Error(invalid.validationMessages[0] ?? "Selected AI intake candidate is malformed.");
+  }
+
+  return candidates.map((candidate) => {
+    const claim = createClaim(
+      {
+        claimText: candidate.candidateClaimText,
+        claimType: claimTypeFromCandidate(candidate.candidateClaimKind),
+        confidenceLevel: confidenceFromCandidate(candidate.candidateConfidenceHint)
+      },
+      user.email
+    );
+    if (!claim) {
+      throw new Error("Claim could not be created from selected AI intake candidate.");
+    }
+    createSourceEvidenceForClaim(
+      claim.id,
+      sourceInputFromCandidate(candidate),
+      {
+        excerpt: candidate.candidateEvidenceText,
+        dateAccessed: dateAccessedFromCandidate(candidate)
+      },
+      relationshipFromCandidate(candidate.candidateEvidenceLink),
+      user.email
+    );
+    const savedClaim = getClaim(claim.id);
+    if (!savedClaim) {
+      throw new Error("Saved AI intake draft claim could not be loaded.");
+    }
+    return savedClaim;
+  });
 }
 
 function candidateFromBlock(block: string): AICandidatePreview {
@@ -157,4 +230,76 @@ function uncertaintyNote(sourceLocator: string, hasEvidenceMarker: boolean) {
     return "Source locator detected, but excerpt boundaries are inferred; librarian review required before save.";
   }
   return "Candidate is deterministic preview output and remains non-record until explicit librarian/admin save.";
+}
+
+function candidateRecordKeyMessages(candidate: AICandidatePreview) {
+  if (!candidate || typeof candidate !== "object") {
+    return [];
+  }
+  return forbiddenRecordKeys.filter((key) => Object.prototype.hasOwnProperty.call(candidate, key)).map((key) => `Candidate must not include record field ${key}.`);
+}
+
+function candidateShapeMessages(candidate: AICandidatePreview) {
+  const messages: string[] = [];
+  if (!candidate || typeof candidate !== "object") {
+    return ["Candidate is malformed."];
+  }
+  if (!candidateKinds.includes(candidate.candidateClaimKind)) {
+    messages.push("Candidate has an invalid claim kind.");
+  }
+  if (!candidateConfidenceHints.includes(candidate.candidateConfidenceHint)) {
+    messages.push("Candidate has an invalid confidence hint.");
+  }
+  if (!candidateEvidenceLinks.includes(candidate.candidateEvidenceLink)) {
+    messages.push("Candidate has an invalid evidence relationship.");
+  }
+  return messages;
+}
+
+function trimmedValue(candidate: AICandidatePreview, key: keyof AICandidatePreview) {
+  const value = candidate?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+const candidateKinds: AICandidateClaimKind[] = [
+  "candidate_description",
+  "candidate_historical_context",
+  "candidate_creator_context",
+  "candidate_format_context",
+  "candidate_teaching_relevance",
+  "candidate_collection_relevance",
+  "candidate_other"
+];
+
+const candidateConfidenceHints: AICandidateConfidenceHint[] = ["candidate_low", "candidate_medium", "candidate_high"];
+
+const candidateEvidenceLinks: AICandidateEvidenceLink[] = ["candidate_supports", "candidate_contextualizes", "candidate_requires_followup"];
+
+function claimTypeFromCandidate(kind: AICandidateClaimKind) {
+  return kind.replace(/^candidate_/, "");
+}
+
+function confidenceFromCandidate(hint: AICandidateConfidenceHint) {
+  return hint.replace(/^candidate_/, "");
+}
+
+function relationshipFromCandidate(link: AICandidateEvidenceLink) {
+  return link.replace(/^candidate_/, "");
+}
+
+function sourceInputFromCandidate(candidate: AICandidatePreview): CreateSourceInput {
+  const sourceLocator = candidate.candidateSourceLocator.trim();
+  return {
+    sourceTitle: candidate.candidateSourceLabel,
+    sourceType: sourceLocator.startsWith("http://") || sourceLocator.startsWith("https://") ? "web_page" : "institutional_note",
+    sourceUrl: sourceLocator
+  };
+}
+
+function dateAccessedFromCandidate(candidate: AICandidatePreview) {
+  const sourceLocator = candidate.candidateSourceLocator.trim();
+  if (!sourceLocator.startsWith("http://") && !sourceLocator.startsWith("https://")) {
+    return "";
+  }
+  return new Date().toISOString().slice(0, 10);
 }
