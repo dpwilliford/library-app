@@ -53,7 +53,7 @@ export default async function ClaimDetailPage({
           </div>
           {searchParams.error ? <p className="error">{searchParams.error}</p> : null}
           {claim.evidenceCount === 0 ? <p className="phase-note">Draft claims need evidence before review.</p> : null}
-          {claim.reviewNote ? <p className="phase-note">Review note: {claim.reviewNote}</p> : null}
+          {activeReviewNote(claim) ? <p className="phase-note">Current review note: {claim.reviewNote}</p> : null}
           <dl className="detail-grid">
             <div>
               <dt>Claim type</dt>
@@ -68,8 +68,8 @@ export default async function ClaimDetailPage({
               <dd>{new Date(claim.createdAt).toLocaleString()}</dd>
             </div>
             <div>
-              <dt>Reviewed</dt>
-              <dd>{claim.reviewedAt ? `${new Date(claim.reviewedAt).toLocaleString()} by ${claim.reviewedByUserId}` : "Not reviewed"}</dd>
+              <dt>Current review decision</dt>
+              <dd>{activeReviewDecision(claim)}</dd>
             </div>
           </dl>
         </section>
@@ -204,4 +204,15 @@ function linkedContext(claim: {
     return `${claim.relatedHoldingTitle} (${claim.relatedHoldingIdentifier || "no identifier"}), ${claim.relatedHoldingCollectionAreaName || "no collection area"}, ${claim.relatedHoldingStatus || "no status"}`;
   }
   return claim.collectionAreaName || "No linked context";
+}
+
+function activeReviewNote(claim: { reviewStatus: string; reviewNote: string }) {
+  return ["approved", "rejected", "needs_revision"].includes(claim.reviewStatus) && claim.reviewNote;
+}
+
+function activeReviewDecision(claim: { reviewStatus: string; reviewedAt: string; reviewedByUserId: string }) {
+  if (!["approved", "rejected", "needs_revision"].includes(claim.reviewStatus) || !claim.reviewedAt) {
+    return "No active review decision";
+  }
+  return `${new Date(claim.reviewedAt).toLocaleString()} by ${claim.reviewedByUserId}`;
 }

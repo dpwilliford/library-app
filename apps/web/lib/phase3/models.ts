@@ -134,7 +134,14 @@ export type ClaimFilters = {
   claimType?: ClaimType | "";
   relatedHoldingId?: string;
   collectionAreaId?: string;
+  linkedContext?: "holding" | "collection_area" | "both" | "neither" | "";
+  reviewedByUserId?: string;
+  createdByUserId?: string;
+  search?: string;
+  sort?: ClaimSort;
 };
+
+export type ClaimSort = "newest" | "oldest" | "recently_updated" | "stale_unreviewed" | "review_decision";
 
 export type CreateClaimInput = {
   claimText: string;

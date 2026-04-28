@@ -13,6 +13,7 @@ import {
   type ClaimEvent,
   type ClaimEventAction,
   type ClaimFilters,
+  type ClaimSort,
   type ConfidenceLevel,
   type CreateClaimInput,
   type CreateEvidenceInput,
@@ -75,6 +76,31 @@ export function listClaims(filters: ClaimFilters = {}) {
     clauses.push("c.collection_area_id = ?");
     values.push(filters.collectionAreaId.trim());
   }
+  if (filters.linkedContext === "holding") {
+    clauses.push("c.related_holding_id IS NOT NULL AND c.collection_area_id IS NULL");
+  }
+  if (filters.linkedContext === "collection_area") {
+    clauses.push("c.related_holding_id IS NULL AND c.collection_area_id IS NOT NULL");
+  }
+  if (filters.linkedContext === "both") {
+    clauses.push("c.related_holding_id IS NOT NULL AND c.collection_area_id IS NOT NULL");
+  }
+  if (filters.linkedContext === "neither") {
+    clauses.push("c.related_holding_id IS NULL AND c.collection_area_id IS NULL");
+  }
+  if (filters.reviewedByUserId?.trim()) {
+    clauses.push("c.reviewed_by_user_id = ?");
+    values.push(filters.reviewedByUserId.trim());
+  }
+  if (filters.createdByUserId?.trim()) {
+    clauses.push("c.created_by_user_id = ?");
+    values.push(filters.createdByUserId.trim());
+  }
+  if (filters.search?.trim()) {
+    clauses.push("(c.claim_text LIKE ? OR h.title LIKE ?)");
+    const searchValue = `%${filters.search.trim()}%`;
+    values.push(searchValue, searchValue);
+  }
 
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   return getDb()
@@ -89,10 +115,28 @@ export function listClaims(filters: ClaimFilters = {}) {
        LEFT JOIN claim_evidence ce ON ce.claim_id = c.id
        ${where}
        GROUP BY c.id
-       ORDER BY c.updated_at DESC, c.created_at DESC`
+       ORDER BY ${orderByForClaims(filters.sort)}`
     )
     .all(...values)
     .map(claimFromDb);
+}
+
+export function getClaimStatusCounts() {
+  const counts = Object.fromEntries(reviewStatuses.map((status) => [status, 0])) as Record<ReviewStatus, number>;
+  for (const row of getDb().prepare("SELECT review_status, COUNT(*) AS count FROM claims GROUP BY review_status").all()) {
+    const status = String(row.review_status) as ReviewStatus;
+    if (reviewStatuses.includes(status)) {
+      counts[status] = Number(row.count);
+    }
+  }
+  return counts;
+}
+
+export function listClaimReviewUsers(field: "created_by_user_id" | "reviewed_by_user_id") {
+  return getDb()
+    .prepare(`SELECT DISTINCT ${field} AS user_id FROM claims WHERE ${field} IS NOT NULL AND ${field} != '' ORDER BY ${field} COLLATE NOCASE`)
+    .all()
+    .map((row) => String(row.user_id));
 }
 
 export function getClaim(claimId: string) {
@@ -113,7 +157,7 @@ export function getClaimDetail(claimId: string): ClaimDetail | null {
 
 export function getClaimEvents(claimId: string) {
   return getDb()
-    .prepare("SELECT * FROM claim_events WHERE claim_id = ? ORDER BY acted_at DESC")
+    .prepare("SELECT * FROM claim_events WHERE claim_id = ? ORDER BY acted_at ASC")
     .all(claimId)
     .map(eventFromDb);
 }
@@ -243,7 +287,8 @@ export function updateClaim(claimId: string, input: UpdateClaimInput, userId: st
        SET claim_text = ?, claim_type = ?, related_holding_id = ?, collection_area_id = ?,
            confidence_level = ?, review_status = ?, updated_at = ?,
            reviewed_by_user_id = CASE WHEN ? = 'needs_revision' THEN NULL ELSE reviewed_by_user_id END,
-           reviewed_at = CASE WHEN ? = 'needs_revision' THEN NULL ELSE reviewed_at END
+           reviewed_at = CASE WHEN ? = 'needs_revision' THEN NULL ELSE reviewed_at END,
+           review_note = CASE WHEN ? = 'needs_revision' THEN NULL ELSE review_note END
        WHERE id = ?`
     )
     .run(
@@ -254,6 +299,7 @@ export function updateClaim(claimId: string, input: UpdateClaimInput, userId: st
       values.confidenceLevel,
       nextStatus,
       timestamp,
+      nextStatus,
       nextStatus,
       nextStatus,
       claimId
@@ -672,10 +718,10 @@ export function returnApprovedClaimToRevisionIfNeeded(claimId: string, userId: s
     .prepare(
       `UPDATE claims
        SET review_status = 'needs_revision', reviewed_by_user_id = NULL, reviewed_at = NULL,
-           review_note = ?, updated_at = ?
+           review_note = NULL, updated_at = ?
        WHERE id = ?`
     )
-    .run(note, nowIso(), claimId);
+    .run(nowIso(), claimId);
   insertClaimEvent({
     claimId,
     entityType: "claim",
@@ -715,13 +761,14 @@ export function insertClaimEvent(event: ClaimEventInput) {
 function setClaimStatus(claimId: string, status: ReviewStatus, userId: string, action: ClaimEventAction, note = "") {
   const claim = requireClaim(claimId);
   const timestamp = nowIso();
+  const isReviewDecision = status === "approved" || status === "rejected" || status === "needs_revision";
   getDb()
     .prepare(
       `UPDATE claims
        SET review_status = ?, updated_at = ?, reviewed_by_user_id = ?, reviewed_at = ?, review_note = ?
        WHERE id = ?`
     )
-    .run(status, timestamp, userId, timestamp, note.trim(), claimId);
+    .run(status, timestamp, isReviewDecision ? userId : null, isReviewDecision ? timestamp : null, isReviewDecision ? note.trim() || null : null, claimId);
   insertClaimEvent({
     claimId,
     entityType: "claim",
@@ -732,6 +779,23 @@ function setClaimStatus(claimId: string, status: ReviewStatus, userId: string, a
     newStatus: status,
     note
   });
+}
+
+function orderByForClaims(sort: ClaimSort | "" | undefined) {
+  switch (sort) {
+    case "oldest":
+      return "c.created_at ASC, c.updated_at ASC";
+    case "recently_updated":
+      return "c.updated_at DESC, c.created_at DESC";
+    case "stale_unreviewed":
+      return "CASE WHEN c.review_status = 'ready_for_review' AND c.reviewed_at IS NULL THEN 0 WHEN c.review_status = 'needs_revision' THEN 1 ELSE 2 END ASC, c.updated_at ASC";
+    case "review_decision":
+      return "CASE WHEN c.reviewed_at IS NULL THEN 1 ELSE 0 END ASC, c.reviewed_at DESC, c.updated_at DESC";
+    case "newest":
+      return "c.created_at DESC, c.updated_at DESC";
+    default:
+      return "c.updated_at DESC, c.created_at DESC";
+  }
 }
 
 function requireClaim(claimId: string) {

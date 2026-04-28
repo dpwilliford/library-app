@@ -49,6 +49,9 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     );
 
     expect(claim?.reviewStatus).toBe("draft");
+    expect(claim?.reviewedAt).toBe("");
+    expect(claim?.reviewedByUserId).toBe("");
+    expect(claim?.reviewNote).toBe("");
     expect(() => phase3.createClaim({ claimText: " ", claimType: "description", confidenceLevel: "low" }, userId)).toThrow(
       "Claim text is required."
     );
@@ -148,13 +151,29 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     phase3.attachEvidenceToClaim(claim!.id, evidence!.id, "supports", userId);
 
     expect(() => phase3.approveClaim(claim!.id, "", userId)).toThrow("Cannot change claim from draft to approved.");
-    expect(phase3.submitClaimForReview(claim!.id, userId)?.reviewStatus).toBe("ready_for_review");
+    const submitted = phase3.submitClaimForReview(claim!.id, userId);
+    expect(submitted?.reviewStatus).toBe("ready_for_review");
+    expect(submitted?.reviewedAt).toBe("");
+    expect(submitted?.reviewedByUserId).toBe("");
+    expect(submitted?.reviewNote).toBe("");
     expect(() => phase3.rejectClaim(claim!.id, "", userId)).toThrow("Rejection requires a note.");
     expect(() => phase3.requestClaimRevision(claim!.id, "", userId)).toThrow("Revision request requires a note.");
-    expect(phase3.requestClaimRevision(claim!.id, "Needs more detail.", userId)?.reviewStatus).toBe("needs_revision");
+    const revision = phase3.requestClaimRevision(claim!.id, "Needs more detail.", userId);
+    expect(revision?.reviewStatus).toBe("needs_revision");
+    expect(revision?.reviewedAt).not.toBe("");
+    expect(revision?.reviewedByUserId).toBe(userId);
+    expect(revision?.reviewNote).toBe("Needs more detail.");
     expect(() => phase3.approveClaim(claim!.id, "", userId)).toThrow("Cannot change claim from needs_revision to approved.");
-    expect(phase3.submitClaimForReview(claim!.id, userId)?.reviewStatus).toBe("ready_for_review");
-    expect(phase3.approveClaim(claim!.id, "Approved.", userId)?.reviewStatus).toBe("approved");
+    const resubmitted = phase3.submitClaimForReview(claim!.id, userId);
+    expect(resubmitted?.reviewStatus).toBe("ready_for_review");
+    expect(resubmitted?.reviewedAt).toBe("");
+    expect(resubmitted?.reviewedByUserId).toBe("");
+    expect(resubmitted?.reviewNote).toBe("");
+    const approved = phase3.approveClaim(claim!.id, "Approved.", userId);
+    expect(approved?.reviewStatus).toBe("approved");
+    expect(approved?.reviewedAt).not.toBe("");
+    expect(approved?.reviewedByUserId).toBe(userId);
+    expect(approved?.reviewNote).toBe("Approved.");
 
     const actions = phase3.getClaimEvents(claim!.id).map((event) => event.action);
     expect(actions).toContain("submitted_for_review");
@@ -170,7 +189,11 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     phase3.attachEvidenceToClaim(claim!.id, evidence!.id, "supports", userId);
     phase3.submitClaimForReview(claim!.id, userId);
 
-    expect(phase3.rejectClaim(claim!.id, "Insufficient evidence.", userId)?.reviewStatus).toBe("rejected");
+    const rejected = phase3.rejectClaim(claim!.id, "Insufficient evidence.", userId);
+    expect(rejected?.reviewStatus).toBe("rejected");
+    expect(rejected?.reviewedAt).not.toBe("");
+    expect(rejected?.reviewedByUserId).toBe(userId);
+    expect(rejected?.reviewNote).toBe("Insufficient evidence.");
   });
 
   it("returns approved claims to needs revision after claim, evidence, or source edits", async () => {
@@ -182,16 +205,122 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     phase3.submitClaimForReview(claim!.id, userId);
     phase3.approveClaim(claim!.id, "Approved.", userId);
 
-    expect(phase3.updateClaim(claim!.id, { claimText: "Edited approved claim." }, userId)?.reviewStatus).toBe("needs_revision");
+    const editedClaim = phase3.updateClaim(claim!.id, { claimText: "Edited approved claim." }, userId);
+    expect(editedClaim?.reviewStatus).toBe("needs_revision");
+    expect(editedClaim?.reviewedAt).toBe("");
+    expect(editedClaim?.reviewedByUserId).toBe("");
+    expect(editedClaim?.reviewNote).toBe("");
+    expect(phase3.getClaimEvents(claim!.id).find((event) => event.action === "approved")?.note).toBe("Approved.");
     phase3.submitClaimForReview(claim!.id, userId);
     phase3.approveClaim(claim!.id, "Approved again.", userId);
     phase3.updateEvidenceRecord(evidence!.id, { excerpt: "Edited excerpt." }, userId);
-    expect(phase3.getClaim(claim!.id)?.reviewStatus).toBe("needs_revision");
+    expect(phase3.getClaim(claim!.id)).toMatchObject({
+      reviewStatus: "needs_revision",
+      reviewedAt: "",
+      reviewedByUserId: "",
+      reviewNote: ""
+    });
     phase3.submitClaimForReview(claim!.id, userId);
     phase3.approveClaim(claim!.id, "Approved again.", userId);
     phase3.updateSource(source!.id, { sourceTitle: "Edited source" }, userId);
-    expect(phase3.getClaim(claim!.id)?.reviewStatus).toBe("needs_revision");
+    expect(phase3.getClaim(claim!.id)).toMatchObject({
+      reviewStatus: "needs_revision",
+      reviewedAt: "",
+      reviewedByUserId: "",
+      reviewNote: ""
+    });
     expect(phase3.getClaimEvents(claim!.id).map((event) => event.action)).toContain("returned_to_revision_after_edit");
+  });
+
+  it("filters and sorts the review queue from persisted claim fields and joins", async () => {
+    const { db, phase2, phase3 } = await loadModules(dbPath);
+    const holding = await seedHolding(phase2);
+
+    const draft = phase3.createClaim(
+      { claimText: "Draft linked holding claim.", claimType: "description", confidenceLevel: "low", relatedHoldingId: holding.id },
+      "creator-a@library.test"
+    );
+    const approved = phase3.createClaim(
+      {
+        claimText: "Approved collection area claim.",
+        claimType: "teaching_relevance",
+        confidenceLevel: "high",
+        collectionAreaId: holding.collectionAreaId
+      },
+      "creator-b@library.test"
+    );
+    const both = phase3.createClaim(
+      {
+        claimText: "Ready claim with both linked context.",
+        claimType: "collection_relevance",
+        confidenceLevel: "medium",
+        relatedHoldingId: holding.id,
+        collectionAreaId: holding.collectionAreaId
+      },
+      "creator-a@library.test"
+    );
+    const neither = phase3.createClaim(
+      { claimText: "No linked context claim.", claimType: "other", confidenceLevel: "medium" },
+      "creator-c@library.test"
+    );
+
+    for (const claim of [approved, both, neither]) {
+      const source = phase3.createSource({ sourceTitle: `Source ${claim!.id}`, sourceType: "book" }, userId);
+      const evidence = phase3.createEvidenceRecord({ sourceId: source!.id, excerpt: "Excerpt." }, userId);
+      phase3.attachEvidenceToClaim(claim!.id, evidence!.id, "supports", userId);
+      phase3.submitClaimForReview(claim!.id, userId);
+    }
+    phase3.approveClaim(approved!.id, "Queue approved.", userId);
+    phase3.requestClaimRevision(neither!.id, "Queue revision.", userId);
+
+    const database = db.getDb();
+    database.prepare("UPDATE claims SET created_at = ?, updated_at = ? WHERE id = ?").run("2026-01-01T00:00:00.000Z", "2026-01-01T00:00:00.000Z", draft!.id);
+    database.prepare("UPDATE claims SET created_at = ?, updated_at = ? WHERE id = ?").run("2026-01-02T00:00:00.000Z", "2026-01-04T00:00:00.000Z", approved!.id);
+    database.prepare("UPDATE claims SET created_at = ?, updated_at = ? WHERE id = ?").run("2026-01-03T00:00:00.000Z", "2026-01-02T00:00:00.000Z", both!.id);
+
+    expect(phase3.getClaimStatusCounts()).toMatchObject({ draft: 1, ready_for_review: 1, approved: 1, needs_revision: 1 });
+    expect(phase3.listClaims({ reviewStatus: "approved" }).map((claim) => claim.id)).toEqual([approved!.id]);
+    expect(phase3.listClaims({ confidenceLevel: "low" }).map((claim) => claim.id)).toEqual([draft!.id]);
+    expect(phase3.listClaims({ claimType: "collection_relevance" }).map((claim) => claim.id)).toEqual([both!.id]);
+    expect(phase3.listClaims({ collectionAreaId: holding.collectionAreaId }).map((claim) => claim.id).sort()).toEqual([approved!.id, both!.id].sort());
+    expect(phase3.listClaims({ linkedContext: "holding" }).map((claim) => claim.id)).toEqual([draft!.id]);
+    expect(phase3.listClaims({ linkedContext: "collection_area" }).map((claim) => claim.id)).toEqual([approved!.id]);
+    expect(phase3.listClaims({ linkedContext: "both" }).map((claim) => claim.id)).toEqual([both!.id]);
+    expect(phase3.listClaims({ linkedContext: "neither" }).map((claim) => claim.id)).toEqual([neither!.id]);
+    expect(phase3.listClaims({ reviewedByUserId: userId }).map((claim) => claim.id).sort()).toEqual([approved!.id, neither!.id].sort());
+    expect(phase3.listClaims({ createdByUserId: "creator-a@library.test" }).map((claim) => claim.id).sort()).toEqual([both!.id, draft!.id].sort());
+    expect(phase3.listClaims({ search: "Watchmen" }).map((claim) => claim.id).sort()).toEqual([both!.id, draft!.id].sort());
+    expect(phase3.listClaims({ sort: "oldest" }).map((claim) => claim.id).slice(0, 3)).toEqual([draft!.id, approved!.id, both!.id]);
+    expect(phase3.listClaims({ sort: "recently_updated" })[0]?.id).toBe(neither!.id);
+    expect(phase3.listClaims({ sort: "stale_unreviewed" })[0]?.id).toBe(both!.id);
+    expect(phase3.listClaims({ sort: "review_decision" })[0]?.reviewedAt).not.toBe("");
+  });
+
+  it("does not mutate holdings or contributors during Phase 3 review-state workflows", async () => {
+    const { phase2, phase3 } = await loadModules(dbPath);
+    const holding = await seedHolding(phase2);
+    const beforeHolding = phase2.getHolding(holding.id);
+    const beforeContributors = phase2.getHoldingContributors(holding.id);
+    const claim = phase3.createClaim(
+      {
+        claimText: "Review workflow must not mutate linked holding data.",
+        claimType: "collection_relevance",
+        confidenceLevel: "medium",
+        relatedHoldingId: holding.id,
+        collectionAreaId: holding.collectionAreaId
+      },
+      userId
+    );
+    const source = phase3.createSource({ sourceTitle: "Integrity source", sourceType: "book" }, userId);
+    const evidence = phase3.createEvidenceRecord({ sourceId: source!.id, excerpt: "Integrity excerpt." }, userId);
+
+    phase3.attachEvidenceToClaim(claim!.id, evidence!.id, "supports", userId);
+    phase3.submitClaimForReview(claim!.id, userId);
+    phase3.approveClaim(claim!.id, "Integrity approval.", userId);
+    phase3.updateClaim(claim!.id, { claimText: "Edited integrity claim." }, userId);
+
+    expect(phase2.getHolding(holding.id)).toEqual(beforeHolding);
+    expect(phase2.getHoldingContributors(holding.id)).toEqual(beforeContributors);
   });
 
   it("exports claims, sources, evidence, links, and review state", async () => {
@@ -210,5 +339,6 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     expect(exported).toContain("relationship");
     expect(exported).toContain("ready_for_review");
     expect(exported).toContain("Export source");
+    expect(phase3.exportClaimsCsv()).toBe(exported);
   });
 });

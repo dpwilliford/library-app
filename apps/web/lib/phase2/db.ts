@@ -279,6 +279,14 @@ function setupSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_claims_related_holding_id ON claims(related_holding_id);
     CREATE INDEX IF NOT EXISTS idx_claims_collection_area_id ON claims(collection_area_id);
     CREATE INDEX IF NOT EXISTS idx_claims_created_at ON claims(created_at);
+    CREATE INDEX IF NOT EXISTS idx_claims_updated_at ON claims(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status_updated_at ON claims(review_status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status_reviewed_at ON claims(review_status, reviewed_at);
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status_confidence ON claims(review_status, confidence_level);
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status_claim_type ON claims(review_status, claim_type);
+    CREATE INDEX IF NOT EXISTS idx_claims_review_status_collection_area ON claims(review_status, collection_area_id);
+    CREATE INDEX IF NOT EXISTS idx_claims_reviewed_by_user_id ON claims(reviewed_by_user_id);
+    CREATE INDEX IF NOT EXISTS idx_claims_created_by_user_id ON claims(created_by_user_id);
     CREATE INDEX IF NOT EXISTS idx_sources_source_type ON sources(source_type);
     CREATE INDEX IF NOT EXISTS idx_sources_source_url ON sources(source_url);
     CREATE INDEX IF NOT EXISTS idx_sources_citation ON sources(citation);
