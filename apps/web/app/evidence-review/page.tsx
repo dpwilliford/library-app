@@ -3,9 +3,26 @@ import { AppShell } from "@/components/AppShell";
 import { ClaimStatusBadge, ConfidenceBadge } from "@/components/ClaimStatusBadge";
 import { PlaceholderPage } from "@/components/PlaceholderPage";
 import { getCollectionAreas, listHoldings } from "@/lib/phase2/collectionData";
-import { claimTypes, confidenceLevels, listClaims, reviewStatuses, type ClaimFilters } from "@/lib/phase3/claimsData";
+import {
+  claimTypes,
+  confidenceLevels,
+  getClaimStatusCounts,
+  listClaimReviewUsers,
+  listClaims,
+  reviewStatuses,
+  type ClaimFilters,
+  type ClaimSort
+} from "@/lib/phase3/claimsData";
 import { canManageEvidence } from "@/lib/phase3/permissions";
 import { requireUser } from "@/lib/session";
+
+const sortOptions: { value: ClaimSort; label: string }[] = [
+  { value: "newest", label: "Newest created" },
+  { value: "oldest", label: "Oldest created" },
+  { value: "recently_updated", label: "Recently updated" },
+  { value: "stale_unreviewed", label: "Stale / unreviewed first" },
+  { value: "review_decision", label: "Review decision date" }
+];
 
 export default async function EvidenceReviewPage({
   searchParams
@@ -19,11 +36,19 @@ export default async function EvidenceReviewPage({
     confidenceLevel: searchParams.confidenceLevel,
     claimType: searchParams.claimType,
     relatedHoldingId: searchParams.relatedHoldingId,
-    collectionAreaId: searchParams.collectionAreaId
+    collectionAreaId: searchParams.collectionAreaId,
+    linkedContext: searchParams.linkedContext,
+    reviewedByUserId: searchParams.reviewedByUserId,
+    createdByUserId: searchParams.createdByUserId,
+    search: searchParams.search,
+    sort: searchParams.sort ?? "newest"
   };
   const claims = canManage ? listClaims(filters) : [];
   const holdings = canManage ? listHoldings() : [];
   const collectionAreas = canManage ? getCollectionAreas() : [];
+  const statusCounts = canManage ? getClaimStatusCounts() : null;
+  const creators = canManage ? listClaimReviewUsers("created_by_user_id") : [];
+  const reviewers = canManage ? listClaimReviewUsers("reviewed_by_user_id") : [];
 
   return (
     <AppShell user={user}>
@@ -34,7 +59,7 @@ export default async function EvidenceReviewPage({
               <p className="eyebrow">Phase 3.1 Manual Claims</p>
               <h1>Evidence Review</h1>
               <p className="muted">
-                Librarian-controlled manual claims with sources, evidence, confidence, review state, and audit events.
+                Librarian-controlled manual claims with canonical review state, evidence, and audit events.
               </p>
             </div>
             <div className="action-row page-actions">
@@ -46,7 +71,24 @@ export default async function EvidenceReviewPage({
               </Link>
             </div>
           </div>
+          {statusCounts ? (
+            <div className="mock-list" aria-label="Review status summary">
+              {reviewStatuses.map((status) => (
+                <div className="mock-row" key={status}>
+                  <span>
+                    <strong>{status.replaceAll("_", " ")}</strong>
+                    <small>{statusCounts[status]} claims</small>
+                  </span>
+                  <ClaimStatusBadge status={status} />
+                </div>
+              ))}
+            </div>
+          ) : null}
           <form className="panel filter-panel" action="/evidence-review">
+            <div className="field">
+              <label htmlFor="search">Search</label>
+              <input id="search" name="search" defaultValue={searchParams.search ?? ""} placeholder="Claim text or linked holding" />
+            </div>
             <div className="field">
               <label htmlFor="reviewStatus">Review status</label>
               <select id="reviewStatus" name="reviewStatus" defaultValue={searchParams.reviewStatus ?? ""}>
@@ -81,7 +123,17 @@ export default async function EvidenceReviewPage({
               </select>
             </div>
             <div className="field">
-              <label htmlFor="relatedHoldingId">Linked holding</label>
+              <label htmlFor="linkedContext">Linked context</label>
+              <select id="linkedContext" name="linkedContext" defaultValue={searchParams.linkedContext ?? ""}>
+                <option value="">Any linked context</option>
+                <option value="holding">Linked holding only</option>
+                <option value="collection_area">Linked collection area only</option>
+                <option value="both">Holding and collection area</option>
+                <option value="neither">No linked context</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="relatedHoldingId">Specific holding</label>
               <select id="relatedHoldingId" name="relatedHoldingId" defaultValue={searchParams.relatedHoldingId ?? ""}>
                 <option value="">Any holding</option>
                 {holdings.map((holding) => (
@@ -92,7 +144,7 @@ export default async function EvidenceReviewPage({
               </select>
             </div>
             <div className="field">
-              <label htmlFor="collectionAreaId">Collection area</label>
+              <label htmlFor="collectionAreaId">Specific collection area</label>
               <select id="collectionAreaId" name="collectionAreaId" defaultValue={searchParams.collectionAreaId ?? ""}>
                 <option value="">Any area</option>
                 {collectionAreas.map((area) => (
@@ -102,9 +154,41 @@ export default async function EvidenceReviewPage({
                 ))}
               </select>
             </div>
+            <div className="field">
+              <label htmlFor="createdByUserId">Creator</label>
+              <select id="createdByUserId" name="createdByUserId" defaultValue={searchParams.createdByUserId ?? ""}>
+                <option value="">Any creator</option>
+                {creators.map((creator) => (
+                  <option value={creator} key={creator}>
+                    {creator}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="reviewedByUserId">Current reviewer</label>
+              <select id="reviewedByUserId" name="reviewedByUserId" defaultValue={searchParams.reviewedByUserId ?? ""}>
+                <option value="">Any current reviewer</option>
+                {reviewers.map((reviewer) => (
+                  <option value={reviewer} key={reviewer}>
+                    {reviewer}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="sort">Sort</label>
+              <select id="sort" name="sort" defaultValue={searchParams.sort ?? "newest"}>
+                {sortOptions.map((option) => (
+                  <option value={option.value} key={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div className="action-row">
               <button className="button" type="submit">
-                Apply Filters
+                Apply
               </button>
               <Link className="button secondary" href="/evidence-review">
                 Clear
@@ -122,6 +206,7 @@ export default async function EvidenceReviewPage({
                     <th>Evidence</th>
                     <th>Linked context</th>
                     <th>Updated</th>
+                    <th>Review decision</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -140,6 +225,7 @@ export default async function EvidenceReviewPage({
                       <td>{claim.evidenceCount}</td>
                       <td>{linkedContextText(claim)}</td>
                       <td>{new Date(claim.updatedAt).toLocaleString()}</td>
+                      <td>{activeReviewDecisionText(claim)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -167,4 +253,11 @@ function linkedContextText(claim: { relatedHoldingTitle: string; relatedHoldingI
     return `${claim.relatedHoldingTitle}${claim.relatedHoldingIdentifier ? ` (${claim.relatedHoldingIdentifier})` : ""}`;
   }
   return claim.collectionAreaName || "No linked context";
+}
+
+function activeReviewDecisionText(claim: { reviewStatus: string; reviewedAt: string; reviewedByUserId: string }) {
+  if (!["approved", "rejected", "needs_revision"].includes(claim.reviewStatus) || !claim.reviewedAt) {
+    return "No active decision";
+  }
+  return `${new Date(claim.reviewedAt).toLocaleString()}${claim.reviewedByUserId ? ` by ${claim.reviewedByUserId}` : ""}`;
 }
