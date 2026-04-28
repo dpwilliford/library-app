@@ -3,16 +3,13 @@
 import { redirect } from "next/navigation";
 import {
   approveClaim,
-  attachEvidenceToClaim,
   createClaim,
-  createEvidenceRecord,
-  createSource,
+  createSourceEvidenceForClaim,
   rejectClaim,
   requestClaimRevision,
   submitClaimForReview,
   updateClaim,
-  updateEvidenceRecord,
-  updateSource
+  updateSourceAndEvidenceRecord
 } from "@/lib/phase3/claimsData";
 import { canManageEvidence } from "@/lib/phase3/permissions";
 import { requireUser } from "@/lib/session";
@@ -80,7 +77,8 @@ export async function createEvidenceAction(formData: FormData) {
   const user = await requireEvidenceManager();
   const claimId = text(formData, "claimId");
   try {
-    const source = createSource(
+    createSourceEvidenceForClaim(
+      claimId,
       {
         sourceTitle: text(formData, "sourceTitle"),
         sourceCreator: text(formData, "sourceCreator"),
@@ -90,24 +88,14 @@ export async function createEvidenceAction(formData: FormData) {
         publisher: text(formData, "publisher"),
         publicationDate: text(formData, "publicationDate")
       },
-      user.email
-    );
-    if (!source) {
-      throw new Error("Source could not be created.");
-    }
-    const evidence = createEvidenceRecord(
       {
-        sourceId: source.id,
         excerpt: text(formData, "excerpt"),
         supportingData: text(formData, "supportingData"),
         dateAccessed: text(formData, "dateAccessed")
       },
+      text(formData, "relationship"),
       user.email
     );
-    if (!evidence) {
-      throw new Error("Evidence could not be created.");
-    }
-    attachEvidenceToClaim(claimId, evidence.id, text(formData, "relationship"), user.email);
   } catch (error) {
     redirectWithError(`/evidence-review/${claimId}/evidence/new`, error);
   }
@@ -120,7 +108,7 @@ export async function updateEvidenceAction(formData: FormData) {
   const evidenceId = text(formData, "evidenceId");
   const sourceId = text(formData, "sourceId");
   try {
-    updateSource(
+    updateSourceAndEvidenceRecord(
       sourceId,
       {
         sourceTitle: text(formData, "sourceTitle"),
@@ -131,12 +119,8 @@ export async function updateEvidenceAction(formData: FormData) {
         publisher: text(formData, "publisher"),
         publicationDate: text(formData, "publicationDate")
       },
-      user.email
-    );
-    updateEvidenceRecord(
       evidenceId,
       {
-        sourceId,
         excerpt: text(formData, "excerpt"),
         supportingData: text(formData, "supportingData"),
         dateAccessed: text(formData, "dateAccessed")

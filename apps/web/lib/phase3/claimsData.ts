@@ -176,6 +176,19 @@ export function exportClaimsCsv() {
   return toCsv(rows);
 }
 
+export function runPhase3Transaction<T>(callback: () => T) {
+  const db = getDb();
+  db.exec("BEGIN");
+  try {
+    const result = callback();
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
 export function createClaim(input: CreateClaimInput, userId: string) {
   const values = validateClaimInput(input);
   const id = randomUUID();
@@ -305,6 +318,35 @@ export function createSource(input: CreateSourceInput, userId: string) {
   return getSource(id);
 }
 
+export function createSourceEvidenceForClaim(
+  claimId: string,
+  sourceInput: CreateSourceInput,
+  evidenceInput: Omit<CreateEvidenceInput, "sourceId">,
+  relationship: EvidenceRelationship | string,
+  userId: string
+) {
+  return runPhase3Transaction(() => {
+    const source = createSource(sourceInput, userId);
+    if (!source) {
+      throw new Error("Source could not be created.");
+    }
+    const evidence = createEvidenceRecord(
+      {
+        sourceId: source.id,
+        excerpt: evidenceInput.excerpt,
+        supportingData: evidenceInput.supportingData,
+        dateAccessed: evidenceInput.dateAccessed
+      },
+      userId
+    );
+    if (!evidence) {
+      throw new Error("Evidence could not be created.");
+    }
+    attachEvidenceToClaim(claimId, evidence.id, relationship, userId);
+    return getEvidenceForClaim(claimId);
+  });
+}
+
 export function updateSource(sourceId: string, input: UpdateSourceInput, userId: string) {
   const current = getSource(sourceId);
   if (!current) {
@@ -410,6 +452,28 @@ export function updateEvidenceRecord(evidenceId: string, input: UpdateEvidenceIn
     returnApprovedClaimToRevisionIfNeeded(claimId, userId, "Evidence changed; approved claim returned to revision.");
   }
   return getEvidenceRecord(evidenceId);
+}
+
+export function updateSourceAndEvidenceRecord(
+  sourceId: string,
+  sourceInput: UpdateSourceInput,
+  evidenceId: string,
+  evidenceInput: Omit<UpdateEvidenceInput, "sourceId">,
+  userId: string
+) {
+  return runPhase3Transaction(() => {
+    updateSource(sourceId, sourceInput, userId);
+    return updateEvidenceRecord(
+      evidenceId,
+      {
+        sourceId,
+        excerpt: evidenceInput.excerpt,
+        supportingData: evidenceInput.supportingData,
+        dateAccessed: evidenceInput.dateAccessed
+      },
+      userId
+    );
+  });
 }
 
 export function attachEvidenceToClaim(

@@ -119,6 +119,27 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     expect(() => phase3.submitClaimForReview(emptyClaim!.id, userId)).toThrow("Claim requires evidence before review.");
   });
 
+  it("rolls back source and evidence creation when claim linking fails", async () => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const claim = phase3.createClaim({ claimText: "Atomic claim.", claimType: "description", confidenceLevel: "medium" }, userId);
+
+    expect(() =>
+      phase3.createSourceEvidenceForClaim(
+        claim!.id,
+        { sourceTitle: "Atomic source", sourceType: "book" },
+        { excerpt: "Valid excerpt." },
+        "invalid_relationship",
+        userId
+      )
+    ).toThrow("Invalid evidence relationship.");
+
+    const database = db.getDb();
+    expect(database.prepare("SELECT COUNT(*) AS count FROM sources").get()?.count).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) AS count FROM evidence_records").get()?.count).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) AS count FROM claim_evidence").get()?.count).toBe(0);
+    expect(database.prepare("SELECT COUNT(*) AS count FROM claim_events WHERE action = 'source_created'").get()?.count).toBe(0);
+  });
+
   it("enforces review transitions and writes audit events", async () => {
     const { phase3 } = await loadModules(dbPath);
     const claim = phase3.createClaim({ claimText: "Reviewable claim.", claimType: "description", confidenceLevel: "medium" }, userId);
