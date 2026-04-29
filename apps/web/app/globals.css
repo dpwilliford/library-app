@@ -559,6 +559,87 @@ th {
   padding: 12px 14px;
 }
 
+.evidence-review-workflow {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-review-workflow .page-action-header > *,
+.evidence-review-workflow .field,
+.evidence-review-workflow .action-row,
+.evidence-review-workflow .mock-row,
+.evidence-review-workflow .table-wrap {
+  min-width: 0;
+}
+
+.evidence-review-workflow h1,
+.evidence-review-workflow h2,
+.evidence-review-workflow h3,
+.evidence-review-workflow p,
+.evidence-review-workflow a,
+.evidence-review-workflow small,
+.evidence-review-workflow strong,
+.evidence-review-workflow li,
+.evidence-review-workflow input,
+.evidence-review-workflow select,
+.evidence-review-workflow textarea {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.evidence-review-workflow .guidance-panel,
+.evidence-review-workflow .confirmation-panel,
+.evidence-review-workflow .empty-state {
+  background: var(--surface);
+  border: 2px solid var(--black);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.evidence-review-workflow .guidance-panel h2,
+.evidence-review-workflow .confirmation-panel h2,
+.evidence-review-workflow .empty-state h2 {
+  font-size: clamp(1.25rem, 2.2vw, 1.8rem);
+  margin: 0;
+}
+
+.evidence-review-workflow .guidance-panel p,
+.evidence-review-workflow .confirmation-panel p,
+.evidence-review-workflow .empty-state p {
+  margin: 0;
+}
+
+.evidence-review-workflow .preview-guidance {
+  border-left: 10px solid var(--accent);
+}
+
+.evidence-review-workflow .confirmation-panel {
+  background: #f2f7f0;
+}
+
+.evidence-review-workflow .confirmation-list {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.evidence-review-workflow .confirmation-list li {
+  background: var(--white);
+  border: 2px solid var(--black);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+}
+
+.evidence-review-workflow .confirmation-list small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .mock-list {
   display: grid;
   gap: 10px;
@@ -586,6 +667,30 @@ th {
 .mock-row-meta {
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.evidence-review-workflow .candidate-preview-row {
+  justify-content: flex-start;
+}
+
+.evidence-review-workflow .candidate-preview-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  height: 24px;
+  margin-top: 2px;
+  width: 24px;
+}
+
+.evidence-review-workflow .candidate-preview-row span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.evidence-review-workflow .preview-only-label {
+  color: var(--black);
+  font-weight: 900;
+  text-transform: uppercase;
 }
 
 .summary-grid {
@@ -765,6 +870,68 @@ code {
   .mock-row,
   .role-banner {
     display: grid;
+  }
+
+  .evidence-review-workflow .action-row .button {
+    width: 100%;
+  }
+
+  .evidence-review-workflow .guidance-panel,
+  .evidence-review-workflow .confirmation-panel,
+  .evidence-review-workflow .empty-state {
+    padding: 14px;
+  }
+
+  .evidence-review-workflow .review-table-wrap {
+    overflow-x: visible;
+  }
+
+  .evidence-review-workflow .responsive-review-table,
+  .evidence-review-workflow .responsive-review-table tbody,
+  .evidence-review-workflow .responsive-review-table tr,
+  .evidence-review-workflow .responsive-review-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .evidence-review-workflow .responsive-review-table thead {
+    display: none;
+  }
+
+  .evidence-review-workflow .responsive-review-table tr {
+    border: 2px solid var(--black);
+    margin-bottom: 12px;
+    padding: 10px;
+  }
+
+  .evidence-review-workflow .responsive-review-table td {
+    border-bottom: 1px solid var(--line);
+    display: grid;
+    gap: 4px;
+    overflow-wrap: anywhere;
+    padding: 10px 0;
+  }
+
+  .evidence-review-workflow .responsive-review-table td::before {
+    color: var(--muted);
+    content: attr(data-label);
+    font-size: 0.76rem;
+    font-weight: 950;
+    text-transform: uppercase;
+  }
+
+  .evidence-review-workflow .responsive-review-table td:last-child {
+    border-bottom: 0;
+  }
+
+  .evidence-review-workflow .candidate-preview-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .evidence-review-workflow .evidence-status-summary .mock-row,
+  .evidence-review-workflow .ai-candidate-list .mock-row {
+    display: grid;
+    grid-template-columns: 1fr;
   }
 }
 
