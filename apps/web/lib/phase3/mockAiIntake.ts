@@ -65,10 +65,18 @@ export function validateSelectedAICandidatesForSave(candidates: AICandidatePrevi
     throw new Error("Selected candidates must be an array.");
   }
   const permissionMessages = canManageEvidence(user.role) ? [] : ["Only evidence manager roles can save AI intake candidates."];
+  const seenCandidateKeys = new Set<string>();
 
   return candidates.map((candidate) => {
+    const candidateKey = candidateDedupeKey(candidate);
+    const duplicateMessages =
+      candidateKey && seenCandidateKeys.has(candidateKey) ? ["Duplicate selected AI intake candidate."] : [];
+    if (candidateKey) {
+      seenCandidateKeys.add(candidateKey);
+    }
     const validationMessages = [
       ...permissionMessages,
+      ...duplicateMessages,
       ...candidateRecordKeyMessages(candidate),
       ...candidateShapeMessages(candidate),
       ...(trimmedValue(candidate, "candidateClaimText") ? [] : ["Candidate requires claim text before save."]),
@@ -244,6 +252,11 @@ function candidateShapeMessages(candidate: AICandidatePreview) {
   if (!candidate || typeof candidate !== "object") {
     return ["Candidate is malformed."];
   }
+  for (const key of candidateStringKeys) {
+    if (typeof candidate[key] !== "string") {
+      messages.push(`Candidate ${key} must be text.`);
+    }
+  }
   if (!candidateKinds.includes(candidate.candidateClaimKind)) {
     messages.push("Candidate has an invalid claim kind.");
   }
@@ -260,6 +273,24 @@ function trimmedValue(candidate: AICandidatePreview, key: keyof AICandidatePrevi
   const value = candidate?.[key];
   return typeof value === "string" ? value.trim() : "";
 }
+
+function candidateDedupeKey(candidate: AICandidatePreview) {
+  if (!candidate || typeof candidate !== "object") {
+    return "";
+  }
+  return candidateStringKeys.map((key) => trimmedValue(candidate, key)).join("\u001f");
+}
+
+const candidateStringKeys: (keyof AICandidatePreview)[] = [
+  "candidateClaimText",
+  "candidateClaimKind",
+  "candidateConfidenceHint",
+  "candidateSourceLabel",
+  "candidateSourceLocator",
+  "candidateEvidenceText",
+  "candidateEvidenceLink",
+  "candidateUncertaintyNote"
+];
 
 const candidateKinds: AICandidateClaimKind[] = [
   "candidate_description",

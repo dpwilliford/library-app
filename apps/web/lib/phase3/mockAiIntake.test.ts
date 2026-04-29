@@ -232,6 +232,45 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     expect(tableCounts(db.getDb())).toEqual(beforeCounts);
   });
 
+  it("rejects duplicate selected candidate payloads before any database write", async () => {
+    const { db } = await loadModules(dbPath);
+    const candidates = generateAICandidates('Course note: "Duplicate payload should not save twice." https://example.test/duplicate');
+    const beforeCounts = tableCounts(db.getDb());
+
+    const validation = validateSelectedAICandidatesForSave([candidates[0]!, candidates[0]!], { email: userId, role: "librarian" });
+
+    expect(validation[1]?.isValidForSave).toBe(false);
+    expect(validation[1]?.validationMessages).toContain("Duplicate selected AI intake candidate.");
+    expect(() => saveSelectedAICandidatesAsDraftRecords([candidates[0]!, candidates[0]!], { email: userId, role: "librarian" })).toThrow(
+      "Duplicate selected AI intake candidate."
+    );
+    expect(tableCounts(db.getDb())).toEqual(beforeCounts);
+  });
+
+  it("rejects non-text selected candidate fields before any database write", async () => {
+    const { db } = await loadModules(dbPath);
+    const beforeCounts = tableCounts(db.getDb());
+    const malformed = {
+      candidateClaimText: "Malformed candidate must not create a partial claim.",
+      candidateClaimKind: "candidate_description",
+      candidateConfidenceHint: "candidate_medium",
+      candidateSourceLabel: "Source label is text",
+      candidateSourceLocator: 123,
+      candidateEvidenceText: "Evidence text is present.",
+      candidateEvidenceLink: "candidate_supports",
+      candidateUncertaintyNote: "Malformed source locator."
+    };
+
+    const validation = validateSelectedAICandidatesForSave([malformed as never], { email: userId, role: "librarian" });
+
+    expect(validation[0]?.isValidForSave).toBe(false);
+    expect(validation[0]?.validationMessages).toContain("Candidate candidateSourceLocator must be text.");
+    expect(() => saveSelectedAICandidatesAsDraftRecords([malformed as never], { email: userId, role: "librarian" })).toThrow(
+      "Candidate candidateSourceLocator must be text."
+    );
+    expect(tableCounts(db.getDb())).toEqual(beforeCounts);
+  });
+
   it("does not mutate holdings or contributors when selected candidates are saved", async () => {
     const { db, phase2 } = await loadModules(dbPath);
     const holding = await seedHolding(phase2);
