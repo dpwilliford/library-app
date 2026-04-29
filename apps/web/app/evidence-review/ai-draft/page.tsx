@@ -24,13 +24,14 @@ export default async function AIDraftIntakePage({ searchParams }: { searchParams
 
   return (
     <AppShell user={user}>
-      <section className="panel stack">
+      <section className="panel stack evidence-review-workflow ai-intake-workflow">
         <div className="page-action-header">
           <div>
             <p className="eyebrow">Phase 3.3 AI Draft Intake</p>
             <h1>AI Intake Preview</h1>
             <p className="muted">
-              Paste source notes to generate deterministic preview candidates. Candidates are not saved until selected and confirmed.
+              Paste source notes to generate deterministic preview candidates. This page is preview-only until a librarian selects
+              candidates and saves them.
             </p>
           </div>
           <div className="action-row page-actions">
@@ -38,6 +39,19 @@ export default async function AIDraftIntakePage({ searchParams }: { searchParams
               Review Queue
             </Link>
           </div>
+        </div>
+
+        <div className="guidance-panel preview-guidance" role="note">
+          <div>
+            <p className="eyebrow">Preview only</p>
+            <h2>Nothing here is a saved evidence record yet</h2>
+          </div>
+          <ul className="plain-list">
+            <li>AI intake candidates are deterministic draft suggestions generated from pasted text for librarian review.</li>
+            <li>Preview candidates are not stored, exported, routed, counted, or placed in the review queue.</li>
+            <li>Nothing is saved until the librarian selects candidates and uses Save Selected Drafts.</li>
+            <li>Saved candidates become normal draft evidence-review records on the review queue.</li>
+          </ul>
         </div>
 
         <form className="stack" action="/evidence-review/ai-draft">
@@ -60,15 +74,13 @@ export default async function AIDraftIntakePage({ searchParams }: { searchParams
         {rawText ? (
           candidates.length > 0 ? (
             <form className="stack" action={saveSelectedAICandidatesAction}>
-              <div className="mock-list" aria-label="AI intake preview candidates">
+              <div className="mock-list ai-candidate-list" aria-label="AI intake preview candidates">
                 {candidates.map((candidate, index) => (
-                  <label className="mock-row" key={`${candidate.candidateClaimText}-${index}`}>
+                  <label className="mock-row candidate-preview-row" key={`${candidate.candidateClaimText}-${index}`}>
                     <input type="checkbox" name="selectedCandidate" value={JSON.stringify(candidate)} />
                     <span>
                       <strong>{candidate.candidateClaimText}</strong>
-                      <small>
-                        Preview only. Not saved. Not part of the archive. Requires librarian confirmation.
-                      </small>
+                      <small className="preview-only-label">Preview only. Not saved. Requires explicit librarian save.</small>
                       <small>
                         {candidate.candidateClaimKind.replace("candidate_", "").replaceAll("_", " ")} ·{" "}
                         {candidate.candidateConfidenceHint.replace("candidate_", "")} confidence ·{" "}
@@ -83,13 +95,21 @@ export default async function AIDraftIntakePage({ searchParams }: { searchParams
               </div>
               <div className="action-row">
                 <SaveSelectedButton />
-                <Link className="button secondary" href="/evidence-review?reviewStatus=draft">
-                  Draft Queue
+                <Link className="button secondary" href="/evidence-review">
+                  Review Queue
                 </Link>
               </div>
             </form>
           ) : (
-            <p className="phase-note">No preview candidates were generated.</p>
+            <div className="empty-state" role="status">
+              <p className="eyebrow">No preview candidates</p>
+              <h2>The pasted text did not produce review-ready candidates</h2>
+              <p>
+                This can happen when the text is blank after cleanup, lacks separable notes, or does not include enough claim and
+                evidence context for the deterministic preview parser. Revise the pasted notes with clearer claim text, source
+                labels or URLs, and excerpt-like evidence, then generate the preview again.
+              </p>
+            </div>
           )
         ) : null}
       </section>

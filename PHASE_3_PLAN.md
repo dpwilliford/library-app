@@ -136,6 +136,12 @@ This phase must preserve the rule: AI assists, AI does not decide.
 
 Improve reusable source handling.
 
+Status note:
+
+- Phase 3.4 has not started.
+- Current Phase 3.3 closeout polish is limited to existing evidence-review queue and AI intake preview clarity.
+- Phase 3.3 closeout polish must not add source reuse, citation management, duplicate source detection, new source/citation data models, source bibliography routes, external APIs, or export changes.
+
 Expected scope:
 
 - source records reused across evidence entries

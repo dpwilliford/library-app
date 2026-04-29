@@ -1,7 +1,7 @@
 import { createClaim, createSourceEvidenceForClaim, getClaim } from "./claimsData";
 import { canManageEvidence } from "./permissions";
 import type { SessionUser } from "../session";
-import type { CreateSourceInput } from "./models";
+import type { Claim, CreateSourceInput } from "./models";
 
 export type AICandidateClaimKind =
   | "candidate_description"
@@ -33,6 +33,11 @@ export type AICandidateSaveValidation = {
   candidate: AICandidatePreview;
   isValidForSave: boolean;
   validationMessages: string[];
+};
+
+export type SavedAIDraftConfirmationItem = {
+  id: string;
+  title: string;
 };
 
 const forbiddenRecordKeys = ["id", "claimId", "sourceId", "evidenceId", "reviewStatus", "review_status", "claimEventId"];
@@ -135,6 +140,38 @@ export function saveSelectedAICandidatesAsDraftRecords(candidates: AICandidatePr
     }
     return savedClaim;
   });
+}
+
+export function evidenceReviewRedirectForSavedAICandidates(claims: Pick<Claim, "id">[]) {
+  if (claims.length === 0) {
+    return "/evidence-review";
+  }
+  const params = new URLSearchParams();
+  for (const claim of claims) {
+    params.append("aiSavedDraftId", claim.id);
+  }
+  return `/evidence-review?${params.toString()}`;
+}
+
+export function listSavedAIDraftConfirmationItems(claimIds: string | string[] | undefined): SavedAIDraftConfirmationItem[] {
+  const ids = Array.isArray(claimIds) ? claimIds : claimIds ? [claimIds] : [];
+  const seen = new Set<string>();
+  return ids
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .filter((id) => {
+      if (seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return true;
+    })
+    .map((id) => getClaim(id))
+    .filter((claim): claim is Claim => Boolean(claim))
+    .map((claim) => ({
+      id: claim.id,
+      title: claim.claimText
+    }));
 }
 
 function candidateFromBlock(block: string): AICandidatePreview {

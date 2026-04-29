@@ -13,6 +13,7 @@ import {
   type ClaimFilters,
   type ClaimSort
 } from "@/lib/phase3/claimsData";
+import { listSavedAIDraftConfirmationItems } from "@/lib/phase3/mockAiIntake";
 import { canManageEvidence } from "@/lib/phase3/permissions";
 import { requireUser } from "@/lib/session";
 
@@ -27,7 +28,7 @@ const sortOptions: { value: ClaimSort; label: string }[] = [
 export default async function EvidenceReviewPage({
   searchParams
 }: {
-  searchParams: ClaimFilters;
+  searchParams: ClaimFilters & { aiSavedDraftId?: string | string[] };
 }) {
   const user = await requireUser();
   const canManage = canManageEvidence(user.role);
@@ -49,11 +50,23 @@ export default async function EvidenceReviewPage({
   const statusCounts = canManage ? getClaimStatusCounts() : null;
   const creators = canManage ? listClaimReviewUsers("created_by_user_id") : [];
   const reviewers = canManage ? listClaimReviewUsers("reviewed_by_user_id") : [];
+  const savedDrafts = canManage ? listSavedAIDraftConfirmationItems(searchParams.aiSavedDraftId) : [];
+  const hasActiveFilters = Boolean(
+    filters.reviewStatus ||
+      filters.confidenceLevel ||
+      filters.claimType ||
+      filters.relatedHoldingId ||
+      filters.collectionAreaId ||
+      filters.linkedContext ||
+      filters.reviewedByUserId ||
+      filters.createdByUserId ||
+      filters.search
+  );
 
   return (
     <AppShell user={user}>
       {canManage ? (
-        <section className="panel stack">
+        <section className="panel stack evidence-review-workflow">
           <div className="page-action-header">
             <div>
               <p className="eyebrow">Phase 3.1 Manual Claims</p>
@@ -74,8 +87,38 @@ export default async function EvidenceReviewPage({
               </Link>
             </div>
           </div>
+          {savedDrafts.length > 0 ? (
+            <div className="confirmation-panel" role="status" aria-live="polite">
+              <div>
+                <p className="eyebrow">Draft records saved</p>
+                <h2>AI intake candidates are ready for review</h2>
+                <p className="muted">
+                  These saved results were loaded from the draft records created on the server. Review each record before changing
+                  its status.
+                </p>
+              </div>
+              <ul className="confirmation-list">
+                {savedDrafts.map((draft) => (
+                  <li key={draft.id}>
+                    <Link href={`/evidence-review/${draft.id}`}>{draft.title}</Link>
+                    <small>Draft record identifier: {draft.id}</small>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {statusCounts?.draft === 0 ? (
+            <div className="empty-state" role="status">
+              <p className="eyebrow">No draft records waiting</p>
+              <h2>Evidence review queue is clear</h2>
+              <p>
+                This queue is where newly created claim and evidence drafts wait for librarian review. Create a manual claim or
+                use AI Intake to preview pasted notes, then explicitly save selected candidates into draft records.
+              </p>
+            </div>
+          ) : null}
           {statusCounts ? (
-            <div className="mock-list" aria-label="Review status summary">
+            <div className="mock-list evidence-status-summary" aria-label="Review status summary">
               {reviewStatuses.map((status) => (
                 <div className="mock-row" key={status}>
                   <span>
@@ -87,7 +130,7 @@ export default async function EvidenceReviewPage({
               ))}
             </div>
           ) : null}
-          <form className="panel filter-panel" action="/evidence-review">
+          <form className="panel filter-panel evidence-review-filter" action="/evidence-review">
             <div className="field">
               <label htmlFor="search">Search</label>
               <input id="search" name="search" defaultValue={searchParams.search ?? ""} placeholder="Claim text or linked holding" />
@@ -199,8 +242,8 @@ export default async function EvidenceReviewPage({
             </div>
           </form>
           {claims.length > 0 ? (
-            <div className="table-wrap">
-              <table>
+            <div className="table-wrap review-table-wrap">
+              <table className="responsive-review-table">
                 <thead>
                   <tr>
                     <th>Claim</th>
@@ -215,27 +258,40 @@ export default async function EvidenceReviewPage({
                 <tbody>
                   {claims.map((claim) => (
                     <tr key={claim.id}>
-                      <td>
+                      <td data-label="Claim">
                         <Link href={`/evidence-review/${claim.id}`}>{claim.claimText}</Link>
                         <div className="muted">{claim.claimType.replaceAll("_", " ")}</div>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <ClaimStatusBadge status={claim.reviewStatus} />
                       </td>
-                      <td>
+                      <td data-label="Confidence">
                         <ConfidenceBadge level={claim.confidenceLevel} />
                       </td>
-                      <td>{claim.evidenceCount}</td>
-                      <td>{linkedContextText(claim)}</td>
-                      <td>{new Date(claim.updatedAt).toLocaleString()}</td>
-                      <td>{activeReviewDecisionText(claim)}</td>
+                      <td data-label="Evidence">{claim.evidenceCount}</td>
+                      <td data-label="Linked context">{linkedContextText(claim)}</td>
+                      <td data-label="Updated">{new Date(claim.updatedAt).toLocaleString()}</td>
+                      <td data-label="Review decision">{activeReviewDecisionText(claim)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="phase-note">No manual claims match this review queue yet.</p>
+            <div className="empty-state" role="status">
+              <p className="eyebrow">{hasActiveFilters ? "No matching records" : "No review records yet"}</p>
+              <h2>{hasActiveFilters ? "No records match the current queue filters" : "Evidence review has no records yet"}</h2>
+              <p>
+                {hasActiveFilters
+                  ? "Adjust or clear the filters to return to the full review queue."
+                  : "Draft claim and evidence records will appear here after a librarian creates them manually or saves selected AI intake candidates."}
+              </p>
+              {hasActiveFilters ? (
+                <Link className="button secondary" href="/evidence-review">
+                  Clear Filters
+                </Link>
+              ) : null}
+            </div>
           )}
         </section>
       ) : (

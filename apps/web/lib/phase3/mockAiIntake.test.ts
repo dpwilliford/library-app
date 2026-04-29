@@ -3,7 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { canManageEvidence } from "./permissions";
-import { generateAICandidates, previewAICandidates, saveSelectedAICandidatesAsDraftRecords, validateSelectedAICandidatesForSave } from "./mockAiIntake";
+import {
+  evidenceReviewRedirectForSavedAICandidates,
+  generateAICandidates,
+  listSavedAIDraftConfirmationItems,
+  previewAICandidates,
+  saveSelectedAICandidatesAsDraftRecords,
+  validateSelectedAICandidatesForSave
+} from "./mockAiIntake";
 
 const userId = "librarian@library.test";
 const fixtureRoot = join(process.cwd(), "fixtures", "phase2");
@@ -132,6 +139,54 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     expect(phase3.exportClaimsCsv()).not.toBe(beforeExport);
     expect(phase3.exportClaimsCsv()).toContain("Selected candidate should become a draft");
     expect(phase3.exportClaimsCsv()).not.toContain("Unselected candidate should remain preview only");
+  });
+
+  it("redirects saved AI intake candidates back to the evidence review queue with saved server IDs", async () => {
+    await loadModules(dbPath);
+    const candidates = generateAICandidates(
+      [
+        'Course note: "First selected draft should be confirmed." https://example.test/first',
+        "",
+        'Course note: "Second selected draft should be confirmed." https://example.test/second'
+      ].join("\n")
+    );
+
+    const saved = saveSelectedAICandidatesAsDraftRecords(candidates, { email: userId, role: "librarian" });
+    const redirectPath = evidenceReviewRedirectForSavedAICandidates(saved);
+    const redirectUrl = new URL(redirectPath, "https://library.test");
+
+    expect(redirectUrl.pathname).toBe("/evidence-review");
+    expect(redirectUrl.searchParams.getAll("aiSavedDraftId")).toEqual(saved.map((claim) => claim.id));
+  });
+
+  it("builds the queue confirmation from actual saved draft records", async () => {
+    await loadModules(dbPath);
+    const candidates = generateAICandidates(
+      [
+        'Course note: "Confirmation should list the first stored draft." https://example.test/first',
+        "",
+        'Collection note: "Confirmation should list the second stored draft." https://example.test/second'
+      ].join("\n")
+    );
+
+    const saved = saveSelectedAICandidatesAsDraftRecords(candidates, { email: userId, role: "librarian" });
+    const confirmation = listSavedAIDraftConfirmationItems(saved.map((claim) => claim.id));
+
+    expect(confirmation).toEqual(
+      saved.map((claim) => ({
+        id: claim.id,
+        title: claim.claimText
+      }))
+    );
+  });
+
+  it("does not build a saved-draft confirmation when no saved records are provided", async () => {
+    await loadModules(dbPath);
+
+    expect(evidenceReviewRedirectForSavedAICandidates([])).toBe("/evidence-review");
+    expect(listSavedAIDraftConfirmationItems(undefined)).toEqual([]);
+    expect(listSavedAIDraftConfirmationItems("")).toEqual([]);
+    expect(listSavedAIDraftConfirmationItems("missing-record")).toEqual([]);
   });
 
   it.each([
@@ -287,12 +342,36 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     expect(tableCounts(db.getDb()).holding_contributors).toBe(beforeCounts.holding_contributors);
   });
 
-  it("does not contain an OpenAI API call in Phase 3.3 intake code", () => {
+  it("shows Phase 3.3 closeout queue empty state, AI intake guidance, AI empty state, and save redirect copy", () => {
+    const queueSource = readFileSync(join(process.cwd(), "app", "evidence-review", "page.tsx"), "utf8");
+    const intakePageSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "page.tsx"), "utf8");
+    const actionSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "actions.ts"), "utf8");
+    const globalCss = readFileSync(join(process.cwd(), "app", "globals.css"), "utf8");
+
+    expect(queueSource).toContain("Evidence review queue is clear");
+    expect(queueSource).toContain("Draft record identifier");
+    expect(queueSource).toContain("listSavedAIDraftConfirmationItems");
+    expect(queueSource).toContain("evidence-review-workflow");
+    expect(intakePageSource).toContain("evidence-review-workflow ai-intake-workflow");
+    expect(intakePageSource).toContain("Nothing here is a saved evidence record yet");
+    expect(intakePageSource).toContain("Preview candidates are not stored, exported, routed, counted, or placed in the review queue.");
+    expect(intakePageSource).toContain("The pasted text did not produce review-ready candidates");
+    expect(actionSource).toContain("evidenceReviewRedirectForSavedAICandidates");
+    expect(actionSource).not.toContain("/evidence-review?reviewStatus=draft");
+    expect(globalCss).toContain(".evidence-review-workflow .candidate-preview-row");
+    expect(globalCss).toContain(".evidence-review-workflow .responsive-review-table");
+    expect(globalCss).not.toMatch(/^\s*\.action-row \.button \{\n\s+width: 100%;/m);
+  });
+
+  it("keeps Phase 3.3 closeout evidence-review code free of OpenAI, fetch, external API, or real AI calls", () => {
     const intakeSource = readFileSync(join(process.cwd(), "lib", "phase3", "mockAiIntake.ts"), "utf8");
+    const queueSource = readFileSync(join(process.cwd(), "app", "evidence-review", "page.tsx"), "utf8");
     const pageSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "page.tsx"), "utf8");
     const actionSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "actions.ts"), "utf8");
 
-    expect(`${intakeSource}\n${pageSource}\n${actionSource}`).not.toMatch(/openai|api\.openai|fetch\(/i);
+    expect(`${intakeSource}\n${queueSource}\n${pageSource}\n${actionSource}`).not.toMatch(
+      /openai|api\.openai|fetch\(|external api|real ai/i
+    );
   });
 
   it("returns no candidates for blank input without touching the database", async () => {

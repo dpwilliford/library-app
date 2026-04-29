@@ -6,6 +6,14 @@ Planning only. Do not implement Phase 3.3 application code from this document un
 
 Phase 3.2 has been merged, verified, and tagged as `v3.2-review-queue-hardening`.
 
+## Closeout Polish Status
+
+Phase 3.3 implementation has since been merged through the deterministic mock AI intake preview route and selected-candidate save boundary.
+
+Current closeout polish remains part of Phase 3.3. It is limited to evidence-review queue clarity, AI intake preview-only language, saved-draft confirmation after explicit save, and responsive review layout.
+
+Roadmap Phase 3.4 remains External Source And Citation Management and has not started. Phase 3.3 closeout polish must not introduce source reuse UI, citation management, duplicate source detection, new source/citation data models, source bibliography routes, external APIs, or export changes.
+
 ## Phase Title
 
 Phase 3.3 — AI Draft Intake Without Authority

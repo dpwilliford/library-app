@@ -6,6 +6,19 @@ Planning only. Do not implement application code from this document until implem
 
 Phase 3.3 is limited to deterministic mock AI-assisted intake preview. It must not call a real OpenAI API or any external model API.
 
+## Closeout Polish Boundary
+
+After Phase 3.3 implementation, closeout polish may clarify the existing evidence-review queue and AI intake preview experience without changing the authority model.
+
+Allowed Phase 3.3 closeout polish:
+
+- clearer evidence-review queue empty states
+- clearer AI intake preview-only language
+- confirmation after selected candidates are explicitly saved as normal draft records
+- responsive layout fixes for the existing evidence-review queue and AI intake preview surfaces
+
+Roadmap Phase 3.4 remains External Source And Citation Management and has not started. Do not add source reuse UI, citation management, duplicate source detection, new source/citation data models, source bibliography routes, external APIs, or export changes as part of Phase 3.3 closeout polish.
+
 ## Controlling Invariant
 
 AI intake candidates are non-record preview objects. They are not stored, have no IDs, do not appear in queries, are not exportable, and cannot influence any system output unless a librarian/admin explicitly saves them into normal Phase 3 draft records.
