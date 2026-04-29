@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { canManageEvidence } from "./permissions";
 import { generateAICandidates, previewAICandidates, saveSelectedAICandidatesAsDraftRecords, validateSelectedAICandidatesForSave } from "./mockAiIntake";
 
 const userId = "librarian@library.test";
@@ -39,6 +40,15 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     db.resetDbForTests();
     rmSync(tempDir, { recursive: true, force: true });
     delete process.env.LIBRARY_DB_PATH;
+  });
+
+  it("uses existing evidence manager permissions for AI intake UI access", () => {
+    expect(canManageEvidence("librarian")).toBe(true);
+    expect(canManageEvidence("collection_area_librarian")).toBe(true);
+    expect(canManageEvidence("head_librarian")).toBe(true);
+    expect(canManageEvidence("administrator")).toBe(true);
+    expect(canManageEvidence("student")).toBe(false);
+    expect(canManageEvidence("professor")).toBe(false);
   });
 
   it("generates deterministic non-record preview candidates without IDs or review state", () => {
@@ -101,8 +111,33 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     expect(tableCounts(db.getDb())).toEqual(beforeCounts);
   });
 
+  it("saves selected candidates only and leaves unselected previews non-persistent", async () => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const candidates = generateAICandidates(
+      [
+        'Course note: "Selected candidate should become a draft." https://example.test/selected',
+        "",
+        'Collection note: "Unselected candidate should remain preview only." https://example.test/unselected'
+      ].join("\n")
+    );
+    const beforeCounts = tableCounts(db.getDb());
+    const beforeExport = phase3.exportClaimsCsv();
+
+    const saved = saveSelectedAICandidatesAsDraftRecords([candidates[0]!], { email: userId, role: "librarian" });
+
+    expect(saved).toHaveLength(1);
+    expect(tableCounts(db.getDb()).claims).toBe(beforeCounts.claims + 1);
+    expect(phase3.listClaims().map((claim) => claim.claimText)).toContain("Course note: \"Selected candidate should become a draft.");
+    expect(phase3.listClaims().map((claim) => claim.claimText)).not.toContain("Collection note: \"Unselected candidate should remain preview only.");
+    expect(phase3.exportClaimsCsv()).not.toBe(beforeExport);
+    expect(phase3.exportClaimsCsv()).toContain("Selected candidate should become a draft");
+    expect(phase3.exportClaimsCsv()).not.toContain("Unselected candidate should remain preview only");
+  });
+
   it.each([
     ["librarian", "librarian@library.test"],
+    ["collection_area_librarian", "area@library.test"],
+    ["head_librarian", "head@library.test"],
     ["administrator", "admin@library.test"]
   ])("saves selected candidates as Phase 3 draft records for %s users", async (role, email) => {
     const { db, phase3 } = await loadModules(dbPath);
@@ -161,7 +196,7 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
 
     for (const role of ["student", "professor"]) {
       expect(() => saveSelectedAICandidatesAsDraftRecords(candidates, { email: `${role}@library.test`, role })).toThrow(
-        "Only librarian and administrator roles can save AI intake candidates."
+        "Only evidence manager roles can save AI intake candidates."
       );
     }
 
@@ -211,6 +246,14 @@ describe("Phase 3.3 mock AI intake candidate boundaries", () => {
     expect(phase2.getHoldingContributors(holding.id)).toEqual(beforeContributors);
     expect(tableCounts(db.getDb()).holdings).toBe(beforeCounts.holdings);
     expect(tableCounts(db.getDb()).holding_contributors).toBe(beforeCounts.holding_contributors);
+  });
+
+  it("does not contain an OpenAI API call in Phase 3.3 intake code", () => {
+    const intakeSource = readFileSync(join(process.cwd(), "lib", "phase3", "mockAiIntake.ts"), "utf8");
+    const pageSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "page.tsx"), "utf8");
+    const actionSource = readFileSync(join(process.cwd(), "app", "evidence-review", "ai-draft", "actions.ts"), "utf8");
+
+    expect(`${intakeSource}\n${pageSource}\n${actionSource}`).not.toMatch(/openai|api\.openai|fetch\(/i);
   });
 
   it("returns no candidates for blank input without touching the database", async () => {

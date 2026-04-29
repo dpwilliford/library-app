@@ -64,7 +64,7 @@ export function validateSelectedAICandidatesForSave(candidates: AICandidatePrevi
   if (!Array.isArray(candidates)) {
     throw new Error("Selected candidates must be an array.");
   }
-  const permissionMessages = canManageEvidence(user.role) ? [] : ["Only librarian and administrator roles can save AI intake candidates."];
+  const permissionMessages = canManageEvidence(user.role) ? [] : ["Only evidence manager roles can save AI intake candidates."];
 
   return candidates.map((candidate) => {
     const validationMessages = [
@@ -88,7 +88,7 @@ export function validateSelectedAICandidatesForSave(candidates: AICandidatePrevi
 
 export function saveSelectedAICandidatesAsDraftRecords(candidates: AICandidatePreview[], user: AICandidateSaveUser) {
   if (!canManageEvidence(user.role)) {
-    throw new Error("Only librarian and administrator roles can save AI intake candidates.");
+    throw new Error("Only evidence manager roles can save AI intake candidates.");
   }
   if (!Array.isArray(candidates) || candidates.length === 0) {
     throw new Error("Select at least one AI intake candidate to save.");
