@@ -5,6 +5,7 @@ import { generateAICandidates } from "@/lib/phase3/mockAiIntake";
 import { canManageEvidence } from "@/lib/phase3/permissions";
 import { requireUser } from "@/lib/session";
 import { saveSelectedAICandidatesAction } from "./actions";
+import { SaveSelectedButton } from "./SaveSelectedButton";
 
 type SearchParams = {
   rawText?: string | string[];
@@ -81,9 +82,7 @@ export default async function AIDraftIntakePage({ searchParams }: { searchParams
                 ))}
               </div>
               <div className="action-row">
-                <button className="button" type="submit">
-                  Save Selected Drafts
-                </button>
+                <SaveSelectedButton />
                 <Link className="button secondary" href="/evidence-review?reviewStatus=draft">
                   Draft Queue
                 </Link>
