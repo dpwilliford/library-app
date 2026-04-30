@@ -138,9 +138,11 @@ Improve reusable source handling.
 
 Status note:
 
-- Phase 3.4 first implementation slice has started with additive source normalization fields, helper functions, duplicate candidate lookup by normalized URL/citation, and data-layer tests.
+- Phase 3.4 now includes two completed implementation slices:
+  1. Data-layer source normalization, duplicate candidate lookup by normalized URL/citation, and regression coverage.
+  2. Read-only source routes for `/evidence-review/sources` and `/evidence-review/sources/[sourceId]`, with librarian/admin-only access and read-only rendering of normalized sources, linked evidence/claims, and advisory duplicate candidates.
 - Current Phase 3.4 work remains limited to source/citation management foundations.
-- Phase 3.4 must not add source reuse UI, source management routes, source bibliography routes, external APIs, export changes, market behavior, or automatic approval unless a later slice is separately approved.
+- Phase 3.4 must not add source reuse UI, export changes, editing, unlinking, merging, deleting, Phase 2 table restructuring, external APIs, AI calls, market behavior, automatic approval, or mutating source-management workflows unless a later slice is separately approved. Phase 3.4 database changes must remain additive.
 
 Expected scope:
 
