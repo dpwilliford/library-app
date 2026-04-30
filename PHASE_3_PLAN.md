@@ -138,9 +138,11 @@ Improve reusable source handling.
 
 Status note:
 
-- Phase 3.4 has not started.
-- Current Phase 3.3 closeout polish is limited to existing evidence-review queue and AI intake preview clarity.
-- Phase 3.3 closeout polish must not add source reuse, citation management, duplicate source detection, new source/citation data models, source bibliography routes, external APIs, or export changes.
+- Phase 3.4 now includes two completed implementation slices:
+  1. Data-layer source normalization, duplicate candidate lookup by normalized URL/citation, and regression coverage.
+  2. Read-only source routes for `/evidence-review/sources` and `/evidence-review/sources/[sourceId]`, with librarian/admin-only access and read-only rendering of normalized sources, linked evidence/claims, and advisory duplicate candidates.
+- Current Phase 3.4 work remains limited to source/citation management foundations.
+- Phase 3.4 must not add source reuse UI, export changes, editing, unlinking, merging, deleting, Phase 2 table restructuring, external APIs, AI calls, market behavior, automatic approval, or mutating source-management workflows unless a later slice is separately approved. Phase 3.4 database changes must remain additive.
 
 Expected scope:
 

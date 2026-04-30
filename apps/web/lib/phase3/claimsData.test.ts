@@ -108,6 +108,114 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     );
   });
 
+  it("adds source normalization fields and keeps existing source rows readable", async () => {
+    const { default: DatabaseConstructor } = await import("better-sqlite3");
+    const legacyDb = new DatabaseConstructor(dbPath);
+    legacyDb
+      .prepare(
+        `CREATE TABLE sources (
+          id TEXT PRIMARY KEY,
+          source_title TEXT,
+          source_creator TEXT,
+          source_type TEXT NOT NULL,
+          source_url TEXT,
+          citation TEXT,
+          publisher TEXT,
+          publication_date TEXT,
+          created_by_user_id TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )`
+      )
+      .run();
+    legacyDb
+      .prepare(
+        `INSERT INTO sources
+         (id, source_title, source_creator, source_type, source_url, citation, publisher, publication_date,
+          created_by_user_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        "legacy-source",
+        "Legacy Source",
+        "",
+        "web_page",
+        " HTTPS://Example.Test/source#section ",
+        " Legacy Citation. ",
+        "",
+        "",
+        userId,
+        "2026-01-01T00:00:00.000Z",
+        "2026-01-01T00:00:00.000Z"
+      );
+    legacyDb.close();
+
+    const { db, phase3 } = await loadModules(dbPath);
+    const columns = db
+      .getDb()
+      .prepare("PRAGMA table_info(sources)")
+      .all()
+      .map((row) => String(row.name));
+
+    expect(columns).toContain("source_reliability_note");
+    expect(columns).toContain("source_access_note");
+    expect(columns).toContain("normalized_source_url");
+    expect(columns).toContain("normalized_citation_key");
+    expect(phase3.getSource("legacy-source")).toMatchObject({
+      sourceTitle: "Legacy Source",
+      normalizedSourceUrl: "https://example.test/source",
+      normalizedCitationKey: "legacy citation"
+    });
+  });
+
+  it("normalizes source URLs and citations for duplicate candidate lookups", async () => {
+    const { phase3 } = await loadModules(dbPath);
+
+    expect(phase3.normalizeSourceUrl(" HTTPS://Example.Test/Source#details ")).toBe("https://example.test/Source");
+    expect(phase3.normalizeCitationKey("  The  Citation  Text.;  ")).toBe("the citation text");
+
+    const urlSource = phase3.createSource(
+      { sourceTitle: "URL source", sourceType: "web_page", sourceUrl: "HTTPS://Example.Test/Source#details" },
+      userId
+    );
+    const citationSource = phase3.createSource(
+      { sourceTitle: "Citation source", sourceType: "book", citation: "  The  Citation  Text.;  " },
+      userId
+    );
+
+    expect(urlSource).toMatchObject({
+      normalizedSourceUrl: "https://example.test/Source",
+      normalizedCitationKey: ""
+    });
+    expect(citationSource).toMatchObject({
+      normalizedSourceUrl: "",
+      normalizedCitationKey: "the citation text"
+    });
+    expect(phase3.listSourceDuplicateCandidates({ sourceUrl: "https://example.test/Source#other" }).map((source) => source.id)).toEqual([
+      urlSource!.id
+    ]);
+    expect(phase3.listSourceDuplicateCandidates({ citation: "The Citation Text." }).map((source) => source.id)).toEqual([
+      citationSource!.id
+    ]);
+    expect(phase3.listSourceDuplicateCandidates({})).toEqual([]);
+  });
+
+  it("does not mutate holdings or contributors when source normalization fields are written", async () => {
+    const { phase2, phase3 } = await loadModules(dbPath);
+    const holding = await seedHolding(phase2);
+    const beforeHolding = phase2.getHolding(holding.id);
+    const beforeContributors = phase2.getHoldingContributors(holding.id);
+
+    const source = phase3.createSource(
+      { sourceTitle: "Normalization integrity source", sourceType: "web_page", sourceUrl: "HTTPS://Example.Test/Integrity#note" },
+      userId
+    );
+    phase3.updateSource(source!.id, { citation: "Integrity Citation." }, userId);
+
+    expect(phase2.getHolding(holding.id)).toEqual(beforeHolding);
+    expect(phase2.getHoldingContributors(holding.id)).toEqual(beforeContributors);
+  });
+
   it("attaches evidence, enforces unique links, and blocks submit without evidence", async () => {
     const { phase3 } = await loadModules(dbPath);
     const claim = phase3.createClaim({ claimText: "Evidence-backed claim.", claimType: "description", confidenceLevel: "medium" }, userId);
