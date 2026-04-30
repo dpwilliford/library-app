@@ -924,12 +924,13 @@ code {
     border-bottom: 0;
   }
 
-  .evidence-review-workflow .candidate-preview-row {
+  .evidence-review-workflow .candidate-preview-row,
+  .evidence-review-workflow .ai-candidate-list .candidate-preview-row {
+    display: grid;
     grid-template-columns: 28px minmax(0, 1fr);
   }
 
-  .evidence-review-workflow .evidence-status-summary .mock-row,
-  .evidence-review-workflow .ai-candidate-list .mock-row {
+  .evidence-review-workflow .evidence-status-summary .mock-row {
     display: grid;
     grid-template-columns: 1fr;
   }
