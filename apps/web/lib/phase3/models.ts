@@ -78,6 +78,10 @@ export type Source = {
   citation: string;
   publisher: string;
   publicationDate: string;
+  sourceReliabilityNote: string;
+  sourceAccessNote: string;
+  normalizedSourceUrl: string;
+  normalizedCitationKey: string;
   createdByUserId: string;
   createdAt: string;
   updatedAt: string;
@@ -128,6 +132,21 @@ export type ClaimDetail = {
   events: ClaimEvent[];
 };
 
+export type SourceUsage = EvidenceRecord & {
+  relationship: EvidenceRelationship | "";
+  claimId: string;
+  claimText: string;
+  claimType: ClaimType | "";
+  reviewStatus: ReviewStatus | "";
+  confidenceLevel: ConfidenceLevel | "";
+};
+
+export type SourceDetail = {
+  source: Source;
+  usages: SourceUsage[];
+  duplicateCandidates: Source[];
+};
+
 export type ClaimFilters = {
   reviewStatus?: ReviewStatus | "";
   confidenceLevel?: ConfidenceLevel | "";
@@ -161,6 +180,8 @@ export type CreateSourceInput = {
   citation?: string;
   publisher?: string;
   publicationDate?: string;
+  sourceReliabilityNote?: string;
+  sourceAccessNote?: string;
 };
 
 export type UpdateSourceInput = Partial<CreateSourceInput>;

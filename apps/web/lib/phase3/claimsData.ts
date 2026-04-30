@@ -23,7 +23,9 @@ import {
   type EvidenceRelationship,
   type ReviewStatus,
   type Source,
+  type SourceDetail,
   type SourceType,
+  type SourceUsage,
   type UpdateClaimInput,
   type UpdateEvidenceInput,
   type UpdateSourceInput
@@ -187,6 +189,58 @@ export function getSource(sourceId: string) {
   return row ? sourceFromDb(row) : null;
 }
 
+export function getSourceDetail(sourceId: string): SourceDetail | null {
+  const source = getSource(sourceId);
+  if (!source) {
+    return null;
+  }
+  return {
+    source,
+    usages: listSourceUsages(sourceId),
+    duplicateCandidates: listSourceDuplicateCandidates({ sourceUrl: source.sourceUrl, citation: source.citation }).filter(
+      (candidate) => candidate.id !== source.id
+    )
+  };
+}
+
+export function listSourceDuplicateCandidates(input: Pick<CreateSourceInput, "sourceUrl" | "citation">) {
+  const normalizedSourceUrl = normalizeSourceUrl(input.sourceUrl ?? "");
+  const normalizedCitationKey = normalizeCitationKey(input.citation ?? "");
+  const clauses: string[] = [];
+  const values: string[] = [];
+
+  if (normalizedSourceUrl) {
+    clauses.push("normalized_source_url = ?");
+    values.push(normalizedSourceUrl);
+  }
+  if (normalizedCitationKey) {
+    clauses.push("normalized_citation_key = ?");
+    values.push(normalizedCitationKey);
+  }
+  if (clauses.length === 0) {
+    return [];
+  }
+
+  return getDb()
+    .prepare(`SELECT * FROM sources WHERE ${clauses.join(" OR ")} ORDER BY updated_at DESC, source_title COLLATE NOCASE`)
+    .all(...values)
+    .map(sourceFromDb);
+}
+
+export function listSourceUsages(sourceId: string) {
+  return getDb()
+    .prepare(
+      `SELECT er.*, ce.relationship, c.id AS claim_id, c.claim_text, c.claim_type, c.review_status, c.confidence_level
+       FROM evidence_records er
+       LEFT JOIN claim_evidence ce ON ce.evidence_id = er.id
+       LEFT JOIN claims c ON c.id = ce.claim_id
+       WHERE er.source_id = ?
+       ORDER BY er.updated_at DESC, er.created_at DESC, er.id`
+    )
+    .all(sourceId)
+    .map(sourceUsageFromDb);
+}
+
 export function getEvidenceRecord(evidenceId: string) {
   const row = getDb().prepare("SELECT * FROM evidence_records WHERE id = ?").get(evidenceId);
   return row ? evidenceFromDb(row) : null;
@@ -197,7 +251,8 @@ export function getEvidenceForClaim(claimId: string) {
     .prepare(
       `SELECT ce.id AS claim_evidence_id, ce.claim_id, ce.evidence_id, ce.relationship, ce.sort_order,
               er.*, s.id AS source_row_id, s.source_title, s.source_creator, s.source_type, s.source_url,
-              s.citation, s.publisher, s.publication_date, s.created_by_user_id AS source_created_by_user_id,
+              s.citation, s.publisher, s.publication_date, s.source_reliability_note, s.source_access_note,
+              s.normalized_source_url, s.normalized_citation_key, s.created_by_user_id AS source_created_by_user_id,
               s.created_at AS source_created_at, s.updated_at AS source_updated_at
        FROM claim_evidence ce
        JOIN evidence_records er ON er.id = ce.evidence_id
@@ -338,8 +393,9 @@ export function createSource(input: CreateSourceInput, userId: string) {
     .prepare(
       `INSERT INTO sources
        (id, source_title, source_creator, source_type, source_url, citation, publisher, publication_date,
+        source_reliability_note, source_access_note, normalized_source_url, normalized_citation_key,
         created_by_user_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       id,
@@ -350,6 +406,10 @@ export function createSource(input: CreateSourceInput, userId: string) {
       values.citation,
       values.publisher,
       values.publicationDate,
+      values.sourceReliabilityNote,
+      values.sourceAccessNote,
+      values.normalizedSourceUrl,
+      values.normalizedCitationKey,
       userId,
       timestamp,
       timestamp
@@ -405,14 +465,17 @@ export function updateSource(sourceId: string, input: UpdateSourceInput, userId:
     sourceUrl: input.sourceUrl ?? current.sourceUrl,
     citation: input.citation ?? current.citation,
     publisher: input.publisher ?? current.publisher,
-    publicationDate: input.publicationDate ?? current.publicationDate
+    publicationDate: input.publicationDate ?? current.publicationDate,
+    sourceReliabilityNote: input.sourceReliabilityNote ?? current.sourceReliabilityNote,
+    sourceAccessNote: input.sourceAccessNote ?? current.sourceAccessNote
   });
   const timestamp = nowIso();
   getDb()
     .prepare(
       `UPDATE sources
        SET source_title = ?, source_creator = ?, source_type = ?, source_url = ?, citation = ?,
-           publisher = ?, publication_date = ?, updated_at = ?
+           publisher = ?, publication_date = ?, source_reliability_note = ?, source_access_note = ?,
+           normalized_source_url = ?, normalized_citation_key = ?, updated_at = ?
        WHERE id = ?`
     )
     .run(
@@ -423,6 +486,10 @@ export function updateSource(sourceId: string, input: UpdateSourceInput, userId:
       values.citation,
       values.publisher,
       values.publicationDate,
+      values.sourceReliabilityNote,
+      values.sourceAccessNote,
+      values.normalizedSourceUrl,
+      values.normalizedCitationKey,
       timestamp,
       sourceId
     );
@@ -652,19 +719,48 @@ export function validateSourceInput(input: CreateSourceInput) {
   if (!sourceTypes.includes(input.sourceType as never)) {
     throw new Error("Invalid source type.");
   }
+  const sourceUrl = input.sourceUrl?.trim() ?? "";
+  const citation = input.citation?.trim() ?? "";
   const values = {
     sourceTitle: input.sourceTitle?.trim() ?? "",
     sourceCreator: input.sourceCreator?.trim() ?? "",
     sourceType: input.sourceType as SourceType,
-    sourceUrl: input.sourceUrl?.trim() ?? "",
-    citation: input.citation?.trim() ?? "",
+    sourceUrl,
+    citation,
     publisher: input.publisher?.trim() ?? "",
-    publicationDate: input.publicationDate?.trim() ?? ""
+    publicationDate: input.publicationDate?.trim() ?? "",
+    sourceReliabilityNote: input.sourceReliabilityNote?.trim() ?? "",
+    sourceAccessNote: input.sourceAccessNote?.trim() ?? "",
+    normalizedSourceUrl: normalizeSourceUrl(sourceUrl),
+    normalizedCitationKey: normalizeCitationKey(citation)
   };
   if (!values.sourceTitle && !values.sourceUrl && !values.citation) {
     throw new Error("Source requires a title, URL, or citation.");
   }
   return values;
+}
+
+export function normalizeSourceUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const url = new URL(trimmed);
+    url.hash = "";
+    url.hostname = url.hostname.toLowerCase();
+    return url.toString();
+  } catch {
+    return trimmed.split("#")[0]?.trim() ?? "";
+  }
+}
+
+export function normalizeCitationKey(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:]+$/g, "")
+    .toLowerCase();
 }
 
 export function validateEvidenceInput(input: CreateEvidenceInput, source: Source) {
@@ -860,6 +956,10 @@ function sourceFromDb(row: Record<string, unknown>): Source {
     citation: String(row.citation ?? ""),
     publisher: String(row.publisher ?? ""),
     publicationDate: String(row.publication_date ?? ""),
+    sourceReliabilityNote: String(row.source_reliability_note ?? ""),
+    sourceAccessNote: String(row.source_access_note ?? ""),
+    normalizedSourceUrl: String(row.normalized_source_url ?? ""),
+    normalizedCitationKey: String(row.normalized_citation_key ?? ""),
     createdByUserId: String(row.created_by_user_id),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
@@ -902,10 +1002,33 @@ function evidenceForClaimFromDb(row: Record<string, unknown>): EvidenceForClaim 
       citation: String(row.citation ?? ""),
       publisher: String(row.publisher ?? ""),
       publicationDate: String(row.publication_date ?? ""),
+      sourceReliabilityNote: String(row.source_reliability_note ?? ""),
+      sourceAccessNote: String(row.source_access_note ?? ""),
+      normalizedSourceUrl: String(row.normalized_source_url ?? ""),
+      normalizedCitationKey: String(row.normalized_citation_key ?? ""),
       createdByUserId: String(row.source_created_by_user_id),
       createdAt: String(row.source_created_at),
       updatedAt: String(row.source_updated_at)
     }
+  };
+}
+
+function sourceUsageFromDb(row: Record<string, unknown>): SourceUsage {
+  return {
+    id: String(row.id),
+    sourceId: String(row.source_id),
+    excerpt: String(row.excerpt ?? ""),
+    supportingData: String(row.supporting_data ?? ""),
+    dateAccessed: String(row.date_accessed ?? ""),
+    createdByUserId: String(row.created_by_user_id),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
+    relationship: String(row.relationship ?? "") as SourceUsage["relationship"],
+    claimId: String(row.claim_id ?? ""),
+    claimText: String(row.claim_text ?? ""),
+    claimType: String(row.claim_type ?? "") as SourceUsage["claimType"],
+    reviewStatus: String(row.review_status ?? "") as SourceUsage["reviewStatus"],
+    confidenceLevel: String(row.confidence_level ?? "") as SourceUsage["confidenceLevel"]
   };
 }
 

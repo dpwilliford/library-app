@@ -76,6 +76,9 @@ export default async function EvidenceReviewPage({
               </p>
             </div>
             <div className="action-row page-actions">
+              <Link className="button secondary" href="/evidence-review/sources">
+                Sources
+              </Link>
               <Link className="button secondary" href="/evidence-review/ai-draft">
                 AI Intake
               </Link>

@@ -201,6 +201,10 @@ function setupSchema(db: Database) {
       citation TEXT,
       publisher TEXT,
       publication_date TEXT,
+      source_reliability_note TEXT,
+      source_access_note TEXT,
+      normalized_source_url TEXT,
+      normalized_citation_key TEXT,
       created_by_user_id TEXT NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -301,6 +305,16 @@ function setupSchema(db: Database) {
     CREATE INDEX IF NOT EXISTS idx_claim_events_acted_at ON claim_events(acted_at);
   `);
 
+  addColumnIfMissing(db, "sources", "source_reliability_note", "TEXT");
+  addColumnIfMissing(db, "sources", "source_access_note", "TEXT");
+  addColumnIfMissing(db, "sources", "normalized_source_url", "TEXT");
+  addColumnIfMissing(db, "sources", "normalized_citation_key", "TEXT");
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_sources_normalized_source_url ON sources(normalized_source_url);
+    CREATE INDEX IF NOT EXISTS idx_sources_normalized_citation_key ON sources(normalized_citation_key);
+  `);
+  backfillSourceNormalization(db);
+
   seedCollectionAreas.forEach((name, index) => {
     db.prepare(
       `INSERT OR IGNORE INTO collection_areas (id, name, description, is_active, sort_order)
@@ -309,6 +323,49 @@ function setupSchema(db: Database) {
   });
 
   backfillLegacyContributors(db);
+}
+
+function addColumnIfMissing(db: Database, tableName: string, columnName: string, columnType: string) {
+  const existing = db.prepare(`PRAGMA table_info(${tableName})`).all().some((row) => String(row.name) === columnName);
+  if (!existing) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnType}`);
+  }
+}
+
+function backfillSourceNormalization(db: Database) {
+  const sources = db.prepare("SELECT id, source_url, citation FROM sources").all();
+  const update = db.prepare(
+    `UPDATE sources
+     SET normalized_source_url = ?, normalized_citation_key = ?
+     WHERE id = ?
+       AND (coalesce(normalized_source_url, '') = '' OR coalesce(normalized_citation_key, '') = '')`
+  );
+  for (const source of sources) {
+    update.run(normalizeSourceUrlForStorage(String(source.source_url ?? "")), normalizeCitationKeyForStorage(String(source.citation ?? "")), source.id);
+  }
+}
+
+function normalizeSourceUrlForStorage(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const url = new URL(trimmed);
+    url.hash = "";
+    url.hostname = url.hostname.toLowerCase();
+    return url.toString();
+  } catch {
+    return trimmed.split("#")[0]?.trim() ?? "";
+  }
+}
+
+function normalizeCitationKeyForStorage(value: string) {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[.,;:]+$/g, "")
+    .toLowerCase();
 }
 
 function backfillLegacyContributors(db: Database) {

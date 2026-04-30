@@ -138,9 +138,9 @@ Improve reusable source handling.
 
 Status note:
 
-- Phase 3.4 has not started.
-- Current Phase 3.3 closeout polish is limited to existing evidence-review queue and AI intake preview clarity.
-- Phase 3.3 closeout polish must not add source reuse, citation management, duplicate source detection, new source/citation data models, source bibliography routes, external APIs, or export changes.
+- Phase 3.4 first implementation slice has started with additive source normalization fields, helper functions, duplicate candidate lookup by normalized URL/citation, and data-layer tests.
+- Current Phase 3.4 work remains limited to source/citation management foundations.
+- Phase 3.4 must not add source reuse UI, source management routes, source bibliography routes, external APIs, export changes, market behavior, or automatic approval unless a later slice is separately approved.
 
 Expected scope:
 
