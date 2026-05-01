@@ -251,6 +251,120 @@ describe("Phase 3.1 manual claims and evidence data layer", () => {
     expect(database.prepare("SELECT COUNT(*) AS count FROM claim_events WHERE action = 'source_created'").get()?.count).toBe(0);
   });
 
+  it("creates claim evidence from an existing source without creating or mutating sources", async () => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const claim = phase3.createClaim({ claimText: "Reuse existing source claim.", claimType: "description", confidenceLevel: "medium" }, userId);
+    const source = phase3.createSource(
+      {
+        sourceTitle: "Reusable source",
+        sourceCreator: "Source Creator",
+        sourceType: "book",
+        citation: "Reusable citation."
+      },
+      userId
+    );
+    const beforeSource = phase3.getSource(source!.id);
+    const sourceCountBefore = db.getDb().prepare("SELECT COUNT(*) AS count FROM sources").get()?.count;
+
+    const evidence = phase3.createEvidenceFromExistingSourceForClaim(
+      claim!.id,
+      source!.id,
+      { excerpt: "New claim-specific excerpt." },
+      "supports",
+      userId
+    );
+
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0]).toMatchObject({
+      claimId: claim!.id,
+      sourceId: source!.id,
+      excerpt: "New claim-specific excerpt.",
+      relationship: "supports"
+    });
+    expect(phase3.getEvidenceRecord(evidence[0].evidenceId)).toMatchObject({
+      sourceId: source!.id
+    });
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM sources").get()?.count).toBe(sourceCountBefore);
+    expect(phase3.getSource(source!.id)).toEqual(beforeSource);
+  });
+
+  it("rejects missing or nonexistent source and claim IDs before source reuse writes", async () => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const claim = phase3.createClaim({ claimText: "Reuse validation claim.", claimType: "description", confidenceLevel: "medium" }, userId);
+    const source = phase3.createSource({ sourceTitle: "Reusable validation source", sourceType: "book" }, userId);
+
+    expect(() =>
+      phase3.createEvidenceFromExistingSourceForClaim(claim!.id, "", { excerpt: "Excerpt." }, "supports", userId)
+    ).toThrow("Source is required.");
+    expect(() =>
+      phase3.createEvidenceFromExistingSourceForClaim(claim!.id, "missing-source", { excerpt: "Excerpt." }, "supports", userId)
+    ).toThrow("Source not found.");
+    expect(() =>
+      phase3.createEvidenceFromExistingSourceForClaim("", source!.id, { excerpt: "Excerpt." }, "supports", userId)
+    ).toThrow("Claim not found.");
+    expect(() =>
+      phase3.createEvidenceFromExistingSourceForClaim("missing-claim", source!.id, { excerpt: "Excerpt." }, "supports", userId)
+    ).toThrow("Claim not found.");
+
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM evidence_records").get()?.count).toBe(0);
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM claim_evidence").get()?.count).toBe(0);
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM sources").get()?.count).toBe(1);
+  });
+
+  it("keeps existing new-source evidence creation behavior unchanged", async () => {
+    const { db, phase3 } = await loadModules(dbPath);
+    const claim = phase3.createClaim({ claimText: "New source behavior claim.", claimType: "description", confidenceLevel: "medium" }, userId);
+
+    const evidence = phase3.createSourceEvidenceForClaim(
+      claim!.id,
+      { sourceTitle: "New source path", sourceType: "book", citation: "New source citation." },
+      { excerpt: "New source excerpt." },
+      "supports",
+      userId
+    );
+
+    expect(evidence).toHaveLength(1);
+    expect(evidence[0].source).toMatchObject({
+      sourceTitle: "New source path",
+      sourceType: "book",
+      citation: "New source citation."
+    });
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM sources").get()?.count).toBe(1);
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM evidence_records").get()?.count).toBe(1);
+    expect(db.getDb().prepare("SELECT COUNT(*) AS count FROM claim_evidence").get()?.count).toBe(1);
+  });
+
+  it("does not mutate Phase 2 holdings, contributors, imports, or audit logs during source reuse", async () => {
+    const { phase2, phase3 } = await loadModules(dbPath);
+    const holding = await seedHolding(phase2);
+    const beforeHolding = phase2.getHolding(holding.id);
+    const beforeContributors = phase2.getHoldingContributors(holding.id);
+    const beforeBatch = phase2.getImportBatch(holding.importBatchId);
+    const beforeReviewRows = phase2.listImportRowsForReview();
+    const beforeReviewSummary = phase2.getImportReviewSummary();
+    const beforeEditLogs = phase2.getHoldingEditLogs(holding.id);
+    const claim = phase3.createClaim(
+      {
+        claimText: "Source reuse should not mutate Phase 2 records.",
+        claimType: "collection_relevance",
+        confidenceLevel: "medium",
+        relatedHoldingId: holding.id,
+        collectionAreaId: holding.collectionAreaId
+      },
+      userId
+    );
+    const source = phase3.createSource({ sourceTitle: "Reusable Phase 2 integrity source", sourceType: "book" }, userId);
+
+    phase3.createEvidenceFromExistingSourceForClaim(claim!.id, source!.id, { excerpt: "Integrity excerpt." }, "supports", userId);
+
+    expect(phase2.getHolding(holding.id)).toEqual(beforeHolding);
+    expect(phase2.getHoldingContributors(holding.id)).toEqual(beforeContributors);
+    expect(phase2.getImportBatch(holding.importBatchId)).toEqual(beforeBatch);
+    expect(phase2.listImportRowsForReview()).toEqual(beforeReviewRows);
+    expect(phase2.getImportReviewSummary()).toEqual(beforeReviewSummary);
+    expect(phase2.getHoldingEditLogs(holding.id)).toEqual(beforeEditLogs);
+  });
+
   it("enforces review transitions and writes audit events", async () => {
     const { phase3 } = await loadModules(dbPath);
     const claim = phase3.createClaim({ claimText: "Reviewable claim.", claimType: "description", confidenceLevel: "medium" }, userId);

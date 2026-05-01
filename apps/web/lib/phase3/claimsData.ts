@@ -453,6 +453,43 @@ export function createSourceEvidenceForClaim(
   });
 }
 
+export function createEvidenceFromExistingSourceForClaim(
+  claimId: string,
+  sourceId: string,
+  evidenceInput: Omit<CreateEvidenceInput, "sourceId">,
+  relationship: EvidenceRelationship | string,
+  userId: string
+) {
+  const normalizedClaimId = claimId.trim();
+  const normalizedSourceId = sourceId.trim();
+  if (!normalizedSourceId) {
+    throw new Error("Source is required.");
+  }
+  if (!getSource(normalizedSourceId)) {
+    throw new Error("Source not found.");
+  }
+  if (!getClaim(normalizedClaimId)) {
+    throw new Error("Claim not found.");
+  }
+
+  return runPhase3Transaction(() => {
+    const evidence = createEvidenceRecord(
+      {
+        sourceId: normalizedSourceId,
+        excerpt: evidenceInput.excerpt,
+        supportingData: evidenceInput.supportingData,
+        dateAccessed: evidenceInput.dateAccessed
+      },
+      userId
+    );
+    if (!evidence) {
+      throw new Error("Evidence could not be created.");
+    }
+    attachEvidenceToClaim(normalizedClaimId, evidence.id, relationship, userId);
+    return getEvidenceForClaim(normalizedClaimId);
+  });
+}
+
 export function updateSource(sourceId: string, input: UpdateSourceInput, userId: string) {
   const current = getSource(sourceId);
   if (!current) {
