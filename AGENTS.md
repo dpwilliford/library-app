@@ -1,60 +1,79 @@
 # AGENTS.md
 
-## General Rule
+## Governing Rule
 
-All agents must follow PROJECT_BRIEF.md, DATA_RULES.md, AI_BEHAVIOR.md, ROADMAP.md, and CHANGELOG.md.
+Agents are bounded executors operating within quota constraints.
 
-Agents may propose, draft, review, audit, and implement. Agents may not silently approve, publish, delete, overwrite, purchase, or merge into main.
+Agents must not act as continuous collaborators. Each agent performs one defined task and stops.
+
+## Core Constraints
+
+Agents must:
+- operate only within a defined PR slice
+- not expand scope
+- not infer missing requirements
+- not redesign adjacent systems
+- not continue work beyond the assigned task
+
+Agents must stop when:
+- the slice is complete
+- a blocking ambiguity exists
+- further work would require a new slice
 
 ## Development Agents
 
+All development agents must follow:
+- CODEX_WORKFLOW.md
+- INTERACTION_PROTOCOL.md
+- PROJECT_INVARIANTS.md (when present)
+
+They must treat these as binding constraints, not guidance.
+
 ### Architecture Agent
-Designs the overall software structure.
-Must explain technical decisions in plain English.
+May define structure only during planning phase.
+Must not redesign during implementation.
 
 ### Security Agent
-Reviews authentication, permissions, uploads, secrets, private data, and deployment risks.
+May audit PRs but must not expand scope.
 
 ### Data Integrity Agent
-Reviews data models, evidence rules, claims, catalog imports, title genealogies, holdings, and acquisition decisions.
+May validate rules but must not introduce new systems.
 
 ### UI/UX Agent
-Reviews dashboards, forms, chatbot flows, accessibility, mobile layout, and plain-language usability.
+May review layout but must not redesign outside slice.
 
 ### Performance and Scale Agent
-Reviews imports, searches, reports, dashboards, background jobs, and large datasets.
+May identify risks but must not implement optimizations outside scope.
 
 ### Documentation Agent
-Keeps README, ROADMAP, CHANGELOG, DATA_RULES, AI_BEHAVIOR, and AGENTS updated.
+May update docs only when explicitly assigned.
 
 ## Product Agents
 
-### Catalog Enhancement Agent
-Suggests metadata improvements for catalog records.
+Product agents must operate only on defined data and rules.
 
-### Evidence Review Agent
-Checks whether claims have sources, excerpts, confidence levels, and review status.
-
-### Title Biography Agent
-Creates provisional title biographies and media genealogies.
-
-### Market Research Agent
-Finds purchasable books, DVDs, games, reissues, editions, and preorders.
-
-### Gap Analysis Agent
-Compares holdings against field knowledge, usage data, and collection priorities.
-
-### Recommendation Agent
-Drafts evidence-based acquisition recommendations.
+They must not introduce new workflows or features.
 
 ## Agent Memory Rule
 
-Long-term instructions belong in repository documentation, not only in agent memory.
+All persistent rules must exist in repository documentation.
 
-Agents may improve through:
-- versioned prompts
-- reviewed examples
-- approved evaluation results
-- documented workflow changes
+Agents must not rely on conversational memory.
 
-Agents may not silently change their own decision rules.
+## Prohibited Behavior
+
+Agents must not:
+- iterate continuously
+- explore multiple approaches
+- merge tasks
+- perform speculative improvements
+- run broad refactors
+
+## Execution Model
+
+Each agent task must map to:
+- one PR
+- one scope
+- one completion condition
+
+No chaining of tasks without explicit new instruction.
