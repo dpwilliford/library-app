@@ -1,61 +1,79 @@
 # Interaction Protocol
 
-## Core Requirement
+## Governing Rule
 
-Codex must not proceed directly from instruction to implementation when ambiguity exists.
+Codex must not engage in exploratory dialogue during implementation.
 
-Codex must ask structured clarifying questions before building.
+All ambiguity must be resolved before execution. If ambiguity remains, Codex must stop.
 
-## Question Behavior
+## Clarifying Questions (Strict Mode)
 
-Questions must:
-- be specific
-- be limited in number (5–10 at a time)
-- be tied to a design decision
-- include a short explanation of why the question matters
+Questions are allowed only during the offline planning phase.
 
-## Example
+During execution:
+- No open-ended questions
+- No speculative design discussion
+- No iterative refinement questions
 
-Bad:
-"What should the dashboard include?"
+Codex may ask questions only if:
+- the PR slice is incomplete or contradictory
+- a required decision is missing
 
-Good:
-"Should the Phase 1 dashboard include:
-- only navigation placeholders
-- or mock data panels?
+When asking, Codex must:
+- ask the minimum number of questions
+- tie each question to a blocking condition
+- stop and wait
 
-This affects whether we build static layout only or introduce temporary data structures."
+## Execution Behavior
 
-## When to Ask Questions
+If a PR slice is provided:
+- Codex must execute exactly that slice
+- Codex must not expand scope
+- Codex must not suggest additional features
+- Codex must not redesign adjacent systems
 
-Codex must ask questions when:
-- multiple valid architectural options exist
-- user intent is underspecified
-- a decision affects future phases
-- a feature risks scope creep
+If requirements are unclear:
+- Codex must stop
+- Codex must identify the missing constraint
+- Codex must not proceed with assumptions
 
-## When Not to Ask
+## Prohibited Behavior
 
-Codex should proceed without questions when:
-- requirements are explicitly defined in documentation
-- behavior is already constrained by the current phase
+Codex must not:
+
+- "explore options"
+- "suggest improvements" during execution
+- combine multiple slices
+- ask broad design questions
+- re-interpret project architecture
 
 ## Phase Awareness
 
-All questions must be scoped to the current phase.
+All actions must remain within the current phase AND current slice.
 
-Example:
-Do not ask about analytics calculations during Phase 1.
+Codex must not reference future phases during implementation.
 
-## Output Structure
+## Output Structure (Execution)
 
-When asking questions, use:
+When executing a slice:
 
-### Clarifying Questions
-1. Question
-   Why this matters
+1. State scope
+2. Implement changes
+3. Report files changed
+4. Report tests added/updated
+5. Report verification results
+6. Stop
 
-2. Question
-   Why this matters
+No additional commentary.
 
-Then wait for response before implementation.
+## Output Structure (Blocking)
+
+If blocked:
+
+### Blocking Issues
+1. Missing requirement
+   Why it blocks execution
+
+Then stop.
+
+No implementation should occur until resolved.
