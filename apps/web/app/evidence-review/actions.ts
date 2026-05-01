@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import {
   approveClaim,
   createClaim,
+  createEvidenceFromExistingSourceForClaim,
   createSourceEvidenceForClaim,
   rejectClaim,
   requestClaimRevision,
@@ -91,6 +92,39 @@ export async function createEvidenceAction(formData: FormData) {
       {
         excerpt: text(formData, "excerpt"),
         supportingData: text(formData, "supportingData"),
+        dateAccessed: text(formData, "dateAccessed")
+      },
+      text(formData, "relationship"),
+      user.email
+    );
+  } catch (error) {
+    redirectWithError(`/evidence-review/${claimId}/evidence/new`, error);
+  }
+  redirect(`/evidence-review/${claimId}`);
+}
+
+export async function createEvidenceFromExistingSourceAction(formData: FormData) {
+  const user = await requireEvidenceManager();
+  const claimId = text(formData, "claimId").trim();
+  try {
+    const sourceId = text(formData, "sourceId").trim();
+    const excerpt = text(formData, "excerpt");
+    const supportingData = text(formData, "supportingData");
+    if (!claimId) {
+      throw new Error("Claim is required.");
+    }
+    if (!sourceId) {
+      throw new Error("Source is required.");
+    }
+    if (!excerpt.trim() && !supportingData.trim()) {
+      throw new Error("Evidence requires an excerpt or supporting data.");
+    }
+    createEvidenceFromExistingSourceForClaim(
+      claimId,
+      sourceId,
+      {
+        excerpt,
+        supportingData,
         dateAccessed: text(formData, "dateAccessed")
       },
       text(formData, "relationship"),
