@@ -2,7 +2,7 @@
 
 ## Status
 
-Second implementation slice in progress. Treat only the "Recommended First Implementation PR Tests" and "Second Implementation PR Tests" sections as active implementation QA until additional Phase 3.4 slices are separately approved and built.
+Source reuse proposal planning in progress. Treat only the "Recommended First Implementation PR Tests" and "Second Implementation PR Tests" sections as active implementation QA until additional Phase 3.4 slices are separately approved and built. Treat "Proposed Third Implementation PR Tests" as planning only.
 
 ## Phase Title
 
@@ -114,3 +114,35 @@ For the second implementation PR, cover only:
 - source detail renders linked evidence, linked claims, review status, and confidence
 - source detail renders advisory duplicate candidates
 - no source reuse UI, export behavior, editing, unlinking, merging, deleting, external API, or AI behavior is introduced
+
+## Proposed Third Implementation PR Tests
+
+Planning only. Do not treat these as implementation QA until source reuse is separately approved and built.
+
+For the proposed third implementation PR, cover only:
+
+- librarian/admin users can see a reusable-source selection path in the Add Evidence workflow
+- student/professor users cannot see reusable-source selectors
+- source reuse actions reject student/professor users
+- source reuse action rejects missing source IDs
+- source reuse action rejects source IDs that do not exist
+- source reuse action rejects missing claim IDs
+- source reuse action rejects claim IDs that do not exist
+- source reuse attaches by the explicitly selected existing source ID only
+- source reuse rejects evidence creation without a source ID
+- source reuse stores exactly one source ID on each new evidence record
+- reused web page and publisher page sources still require date accessed
+- reused sources still require excerpt or supporting data on the new evidence record
+- source reuse creates one new evidence record
+- source reuse creates one new claim-evidence link for the target claim
+- source reuse does not create a new source row
+- source reuse does not mutate the reused source row
+- source reuse does not mutate existing evidence rows
+- source reuse does not edit, clear, unlink, or replace source IDs on existing evidence rows
+- source reuse does not mutate unrelated claims
+- source reuse preserves existing approved-claim revision behavior when adding evidence to an approved claim
+- source reuse does not mutate Phase 2 holdings, contributors, import rows, import batches, or holding audit logs
+- multiple sources with equivalent normalized URL or citation data may coexist
+- duplicate-candidate signals do not auto-select, auto-attach, replace, merge, or deduplicate sources
+- duplicate-candidate information remains advisory during source selection
+- no export behavior, source editing, source mutation, unlinking, merging, auto-deduplication, deleting, external API, AI behavior, or Phase 2 table restructuring is introduced

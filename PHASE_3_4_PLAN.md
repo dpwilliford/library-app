@@ -2,7 +2,7 @@
 
 ## Status
 
-Second implementation slice in progress. Do not implement additional Phase 3.4 application code from this document until a separate implementation prompt is approved for that slice.
+Source reuse proposal planning in progress. Do not implement additional Phase 3.4 application code from this document until a separate implementation prompt is approved for that slice.
 
 Phase 3.3 is closed. Phase 3.4 now includes additive source normalization fields, data-layer duplicate lookup helpers, and read-only source index/detail routes inside the existing Phase 3 evidence-review workflow.
 
@@ -96,6 +96,109 @@ Do not add source authority tables, citation-style tables, market listing tables
 - Web and publisher-page sources must continue to require date accessed at evidence creation time.
 - User-facing language should say "source" and "citation"; do not use vague internal terms like "scope."
 
+## Source Reuse Proposal
+
+Status: planning only. No routes, UI, server actions, data mutations, or database schema changes are approved by this section.
+
+Source reuse means selecting an existing `sources` row when creating a new evidence record for a claim. The reused source supplies shared citation metadata, while the new evidence record supplies claim-specific excerpt, supporting data, date accessed, relationship, and claim link.
+
+Source reuse does not mean:
+
+- editing an existing source
+- reassigning an existing evidence record to a different source
+- merging duplicate sources
+- deleting sources
+- approving sources
+- approving claims
+- changing existing evidence records
+- changing existing claim review states except through the same rules already used when adding evidence to approved claims
+
+### Proposed Workflow Placement
+
+Source reuse should appear only in the existing Add Evidence workflow:
+
+- Route: `/evidence-review/[claimId]/evidence/new`
+- Current path retained: create evidence with a new source.
+- Proposed path: choose an existing source, inspect its read-only metadata, then create a new evidence record attached to the current claim.
+
+The source index and source detail pages may provide inspection context, but they should not become mutation screens in this slice.
+
+### Identity And Cardinality Rules
+
+- Source reuse attaches evidence by an existing `sourceId` only.
+- No implicit deduplication, source merging, or source replacement occurs during reuse.
+- Multiple source records with equivalent normalized URL or citation data may coexist.
+- Each evidence record must reference exactly one `sourceId` at creation time.
+- Source linkage is immutable in Phase 3.4. Existing evidence records may not be edited to change, clear, unlink, or replace their source.
+
+### Proposed User Capabilities
+
+Allowed users may:
+
+- search or browse existing sources from the Add Evidence workflow
+- inspect source title, creator, type, URL, citation, publisher, publication date, reliability note, access note, normalized URL, and normalized citation key
+- see advisory duplicate-candidate context when choosing a source
+- select one existing source for a new evidence record
+- enter new excerpt or supporting data
+- enter date accessed when required by source type
+- choose the claim-evidence relationship
+- save a new evidence record and claim-evidence link
+
+Allowed users may not:
+
+- edit source metadata during reuse
+- edit existing evidence records during reuse
+- change an existing evidence record's `sourceId`
+- unlink existing evidence from claims
+- merge duplicate source records
+- delete source records
+- delete evidence records
+- use source reuse to approve claims or sources
+- use source reuse to trigger AI enrichment or external lookup
+- use source reuse to change Phase 2 holdings or contributors
+
+### Proposed Permission Boundaries
+
+Allowed:
+
+- librarian
+- collection-area librarian
+- head librarian
+- administrator
+
+Blocked:
+
+- student
+- professor
+- unauthenticated users
+
+Permission checks must exist on both the Add Evidence route and any server action that creates evidence from an existing source. Blocked users must not see reusable-source selectors or write evidence through reuse actions.
+
+### Proposed Validation Rules
+
+- Existing source ID is required for the reuse path.
+- The source must exist.
+- The target claim must exist.
+- Evidence creation must be rejected if no `sourceId` is supplied.
+- Evidence creation must never create source records in the reuse path.
+- Evidence creation must never mutate existing source records in the reuse path.
+- Excerpt or supporting data is required.
+- Web page and publisher page sources still require date accessed.
+- Evidence relationship must remain one of the existing allowed relationships.
+- Reuse must create one new `evidence_records` row and one new `claim_evidence` row.
+- Reuse must not create a new `sources` row.
+- Reuse must not mutate the reused source row.
+- Reuse must not mutate existing evidence records.
+- Reuse must not mutate Phase 2 holdings, contributors, import rows, import batches, or holding audit logs.
+
+### Proposed Selection Behavior
+
+- Source reuse must be an explicit user action.
+- The system must not automatically match, select, attach, replace, merge, or deduplicate sources.
+- Duplicate-candidate signals remain advisory only.
+- Duplicate-candidate signals must not alter selected source IDs, evidence creation, claim linkage, or review status.
+- Users may deliberately select any existing source they are allowed to inspect, even when duplicate-candidate signals exist.
+
 ## Duplicate Detection Rules
 
 Duplicate detection is advisory in Phase 3.4.
@@ -164,6 +267,8 @@ Expected export behavior:
 - new source bibliography export, if added, should be separate from claim/evidence export
 - bibliography export should include source ID, title, creator, source type, URL, citation, publisher, publication date, reliability note, access note, duplicate-normalization fields if approved, created/updated timestamps, and linked evidence count
 - unsaved AI intake candidates remain excluded from all exports
+
+Source reuse planning does not approve any export changes.
 
 ## Permission Model
 
@@ -250,3 +355,9 @@ Current status: implemented in the local worktree and passing automated checks.
 The second implementation PR should add only read-only source index/detail routes with route-level permission tests and rendering tests for empty, populated, linked-evidence, and duplicate-candidate states. It should not add source reuse UI, export changes, editing, unlinking, merging, deleting, external APIs, or AI calls.
 
 Current status: implemented in the local worktree and passing automated checks. Remaining Phase 3.4 capabilities still require separate approval before implementation.
+
+## Proposed Third Implementation PR
+
+The proposed third implementation PR should add only existing-source reuse from the Add Evidence workflow. It should use the existing source table and existing evidence/claim-evidence model. It should not add export changes, source editing, source merging, source deletion, source bibliography routes, external APIs, AI calls, Phase 2 table restructuring, or mutating source-management workflows outside the Add Evidence save path.
+
+Current status: planning only. No source reuse route, UI, server action, or data mutation has been implemented from this proposal.
